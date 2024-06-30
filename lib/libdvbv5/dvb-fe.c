@@ -1520,7 +1520,7 @@ dvbv3_fallback:
 		scale = FE_SCALE_NOT_AVAILABLE;
 	else
 		scale = FE_SCALE_COUNTER;
-	dvb_fe_store_stats(parms, DTV_STAT_ERROR_BLOCK_COUNT, scale, 0, snr);
+	dvb_fe_store_stats(parms, DTV_STAT_ERROR_BLOCK_COUNT, scale, 0, ucb);
 
 	if (parms->p.verbose > 1) {
 		dvb_log(_("Status: "));
