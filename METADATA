@@ -1,0 +1,16 @@
+name: "v4l-utils"
+description:
+    "Collection of tools to test video4linux devices."
+
+third_party {
+  homepage: "https://www.linuxtv.org/"
+  identifier {
+    type: "Git"
+    value: "https://git.linuxtv.org/v4l-utils.git"
+    primary_source: true
+    version: "v4l-utils-1.28.1"
+  }
+  license_type: RESTRICTED
+  version: "v4l-utils-1.28.1"
+  last_upgrade_date { year: 2024 month: 11 day: 20 }
+}
