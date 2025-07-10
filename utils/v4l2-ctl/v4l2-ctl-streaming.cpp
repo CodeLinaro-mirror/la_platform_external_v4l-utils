@@ -38,8 +38,8 @@ static v4l2_std_id stream_out_std;
 static bool stream_out_refresh;
 static tpg_move_mode stream_out_hor_mode = TPG_MOVE_NONE;
 static tpg_move_mode stream_out_vert_mode = TPG_MOVE_NONE;
-static unsigned reqbufs_count_cap = 4;
-static unsigned reqbufs_count_out = 4;
+static unsigned reqbufs_count_cap = 0;
+static unsigned reqbufs_count_out = 0;
 static char *file_to;
 static bool to_with_hdr;
 static char *host_to;
@@ -854,11 +854,8 @@ void streaming_cmd(int ch, char *optarg)
 		memory = V4L2_MEMORY_USERPTR;
 		fallthrough;
 	case OptStreamMmap:
-		if (optarg) {
+		if (optarg)
 			reqbufs_count_cap = strtoul(optarg, nullptr, 0);
-			if (reqbufs_count_cap == 0)
-				reqbufs_count_cap = 3;
-		}
 		break;
 	case OptStreamDmaBuf:
 		memory = V4L2_MEMORY_DMABUF;
@@ -867,11 +864,8 @@ void streaming_cmd(int ch, char *optarg)
 		out_memory = V4L2_MEMORY_USERPTR;
 		fallthrough;
 	case OptStreamOutMmap:
-		if (optarg) {
+		if (optarg)
 			reqbufs_count_out = strtoul(optarg, nullptr, 0);
-			if (reqbufs_count_out == 0)
-				reqbufs_count_out = 3;
-		}
 		break;
 	case OptStreamOutDmaBuf:
 		out_memory = V4L2_MEMORY_DMABUF;
@@ -2466,6 +2460,33 @@ static void stateful_m2m(cv4l_fd &fd, cv4l_queue &in, cv4l_queue &out,
 			return;
 		}
 
+		if (ex_fds && FD_ISSET(fd.g_fd(), ex_fds)) {
+			struct v4l2_event ev;
+
+			while (!fd.dqevent(ev)) {
+				if (ev.type == V4L2_EVENT_EOS) {
+					wr_fds = nullptr;
+					if (!verbose)
+						stderr_info("\n");
+					stderr_info("EOS EVENT\n");
+					fflush(stderr);
+				} else if (ev.type == V4L2_EVENT_SOURCE_CHANGE) {
+					if (!verbose)
+						stderr_info("\n");
+					stderr_info("SOURCE CHANGE EVENT\n");
+					in_source_change_event = true;
+
+					/*
+					 * if capture is not streaming, the
+					 * driver will not send a last buffer so
+					 * we set it here
+					 */
+					if (!cap_streaming)
+						last_buffer = true;
+				}
+			}
+		}
+
 		if (rd_fds && FD_ISSET(fd.g_fd(), rd_fds)) {
 			r = do_handle_cap(fd, in, fin, nullptr,
 					  count[CAP], fps_ts[CAP], fmt_in,
@@ -2501,35 +2522,18 @@ static void stateful_m2m(cv4l_fd &fd, cv4l_queue &in, cv4l_queue &out,
 			}
 		}
 
-		if (ex_fds && FD_ISSET(fd.g_fd(), ex_fds)) {
-			struct v4l2_event ev;
-
-			while (!fd.dqevent(ev)) {
-				if (ev.type == V4L2_EVENT_EOS) {
-					wr_fds = nullptr;
-					if (!verbose)
-						stderr_info("\n");
-					stderr_info("EOS EVENT\n");
-					fflush(stderr);
-				} else if (ev.type == V4L2_EVENT_SOURCE_CHANGE) {
-					if (!verbose)
-						stderr_info("\n");
-					stderr_info("SOURCE CHANGE EVENT\n");
-					in_source_change_event = true;
-
-					/*
-					 * if capture is not streaming, the
-					 * driver will not send a last buffer so
-					 * we set it here
-					 */
-					if (!cap_streaming)
-						last_buffer = true;
-				}
-			}
-		}
-
 		if (last_buffer) {
 			if (in_source_change_event) {
+				struct v4l2_control ctrl = {
+					.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+				};
+
+				{
+					cv4l_disable_trace dt(fd);
+					if (!fd.g_ctrl(ctrl))
+						reqbufs_count_cap = ctrl.value;
+				}
+
 				in_source_change_event = false;
 				last_buffer = false;
 				if (capture_setup(fd, in, exp_fd_p, &fmt_in))
@@ -2982,6 +2986,29 @@ void streaming_set(cv4l_fd &fd, cv4l_fd &out_fd, cv4l_fd &exp_fd)
 	get_out_crop_rect(fd);
 	get_codec_type(fd);
 
+	if (!reqbufs_count_cap) {
+		struct v4l2_control ctrl = {
+			.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+		};
+
+		cv4l_disable_trace dt(fd);
+		if (!fd.g_ctrl(ctrl))
+			reqbufs_count_cap = ctrl.value;
+		if (!reqbufs_count_cap)
+			reqbufs_count_cap = 4;
+	}
+	if (!reqbufs_count_out) {
+		struct v4l2_control ctrl = {
+			.id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
+		};
+
+		cv4l_disable_trace dt(fd);
+		if (!fd.g_ctrl(ctrl))
+			reqbufs_count_out = ctrl.value;
+		if (!reqbufs_count_out)
+			reqbufs_count_out = 4;
+	}
+
 	if (do_cap && do_out && out_fd.g_fd() < 0)
 		streaming_set_m2m(fd, exp_fd);
 	else if (do_cap && do_out)
@@ -3014,7 +3041,8 @@ void streaming_list(cv4l_fd &fd, cv4l_fd &out_fd)
 		stream_buf_caps(fd, fd.g_type());
 
 	if (options[OptStreamOutBufCaps])
-		stream_buf_caps(*p_out_fd, v4l_type_invert(p_out_fd->g_type()));
+		stream_buf_caps(*p_out_fd, p_out_fd->has_vid_m2m() ?
+				v4l_type_invert(p_out_fd->g_type()) : p_out_fd->g_type());
 
 	if (options[OptListBuffersVbi])
 		list_buffers(fd, V4L2_BUF_TYPE_VBI_CAPTURE);

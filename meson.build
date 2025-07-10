@@ -1,6 +1,6 @@
 project('v4l-utils', 'c', 'cpp',
-    version: '1.28.1',
-    meson_version : '>= 0.57',
+    version: '1.30.0',
+    meson_version : '>= 0.60',
     default_options : [
         'buildtype=debugoptimized',
         'warning_level=1',
@@ -9,8 +9,7 @@ project('v4l-utils', 'c', 'cpp',
     ],
     license : 'LGPL 2.1+')
 
-# meson >= 0.56 can use instead meson.project_source_root()
-source_root = meson.current_source_dir()
+source_root = meson.project_source_root()
 
 cc = meson.get_compiler('c')
 cpp = meson.get_compiler('cpp')
@@ -43,9 +42,11 @@ conf.set('PATCH', as_patch_version)
 
 common_arguments = [
     '-Wpointer-arith',
+    '-Wno-psabi',
     '-D_GNU_SOURCE',
     '-DPROMOTED_MODE_T=int',
     '-DENABLE_NLS',
+    '-DGETSUBOPT_IGNORE_COMMA_IN_BRACKET',
     '-include', meson.current_build_dir() / 'config.h',
 ]
 
@@ -53,8 +54,12 @@ v4l2_wrapper_args = [
     # As the library needs to provide both 32-bit and 64-bit versions
     # of file operations, disable transparent large file support (fixes
     # 'Error: symbol `open64/mmap64' is already defined' compile failure
-    # otherwise)
+    # otherwise).
+    #
+    # Also disable _TIME_BITS=64 since this is allowed only with
+    # _FILE_OFFSET_BITS=64, which is now 32.
     '-U_FILE_OFFSET_BITS',
+    '-U_TIME_BITS',
     '-D_FILE_OFFSET_BITS=32',
     '-D_LARGEFILE64_SOURCE',
 ]
@@ -202,20 +207,30 @@ size_t iconv (iconv_t cd, char * *inbuf, size_t *inbytesleft, char * *outbuf, si
     endif
 endif
 
+dep_intl = dependency('intl')
+
 have_gconv = cc.has_header('gconv.h', required : get_option('gconv'))
 
 # Detect system gconv directory
 gconvsysdir = get_option('gconvsysdir')
 
 # Generic check: works with most distributions
-gconv_dirs_generic = [
-    'lib64',
-    'usr/lib64',
-    'lib',
-    'usr/lib',
-    'usr/local/lib64',
-    'usr/local/lib',
-]
+if cc.sizeof('long') == 8
+    gconv_dirs_generic = [
+        'lib64',
+        'usr/lib64',
+        'lib',
+        'usr/lib',
+        'usr/local/lib64',
+        'usr/local/lib',
+    ]
+else
+    gconv_dirs_generic = [
+        'lib',
+        'usr/lib',
+        'usr/local/lib',
+    ]
+endif
 
 if gconvsysdir == ''
     foreach dir : gconv_dirs_generic
@@ -450,10 +465,12 @@ summary({
                 get_option('v4l2-compliance-libv4l') ? 'with libv4l' : 'without libv4l',
             ],
             'v4l2-compliance-32' : is_variable('v4l2_compliance_32'),
+            'v4l2-compliance-32-time64' : is_variable('v4l2_compliance_32_time64'),
             'v4l2-ctl' : [
                 is_variable('v4l2_ctl'),
                 get_option('v4l2-ctl-libv4l') ? 'with libv4l' : 'without libv4l',
             ],
             'v4l2-ctl-32' : is_variable('v4l2_ctl_32'),
+            'v4l2-ctl-32-time64' : is_variable('v4l2_ctl_32_time64'),
             'v4l2-tracer' : is_variable('v4l2_tracer'),
         }, bool_yn : true, section : 'Applications')

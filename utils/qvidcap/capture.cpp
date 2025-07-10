@@ -217,6 +217,10 @@ CaptureWin::CaptureWin(QScrollArea *sa, QWidget *parent) :
 	m_sock(0),
 	m_v4l_queue(0),
 	m_frame(0),
+	m_verbose(false),
+	m_no_loop(false),
+	m_pause(false),
+	m_fromFrame(0),
 	m_ctx(0),
 	m_origPixelFormat(0),
 	m_fps(0),
@@ -588,6 +592,18 @@ void CaptureWin::keyPressEvent(QKeyEvent *event)
 			m_cnt = 1;
 		else if (m_singleStep && m_frame > m_singleStepStart)
 			m_singleStepNext = true;
+		else if (!m_singleStep && m_mode == AppModeFile)
+			m_pause = !m_pause;
+		return;
+	case Qt::Key_Backspace:
+		if (m_mode == AppModeFile &&
+		    m_singleStep && m_frame > m_singleStepStart) {
+			if (m_file.pos() >= m_imageSize * 2) {
+				m_file.seek(m_file.pos() - m_imageSize * 2);
+				m_frame -= 2;
+				m_singleStepNext = true;
+			}
+		}
 		return;
 	case Qt::Key_Escape:
 		if (!m_scrollArea->isFullScreen())
@@ -1121,6 +1137,9 @@ void CaptureWin::v4l2ReadEvent()
 {
 	cv4l_buffer buf(m_fd->g_type());
 
+	if (m_pause)
+		return;
+
 	if (m_singleStep && m_frame > m_singleStepStart && !m_singleStepNext)
 		return;
 
@@ -1221,6 +1240,9 @@ int CaptureWin::read_u32(__u32 &v)
 void CaptureWin::sockReadEvent()
 {
 	int n;
+
+	if (m_pause)
+		return;
 
 	if (m_singleStep && m_frame > m_singleStepStart && !m_singleStepNext)
 		return;
@@ -1414,12 +1436,14 @@ void CaptureWin::startTimer()
 	for (unsigned p = 0; p < m_v4l_fmt.g_num_planes(); p++)
 		m_imageSize += m_v4l_fmt.g_sizeimage(p);
 
-	if (m_file.isOpen())
-		m_file.seek(0);
-
-	if (m_file.isOpen() && m_imageSize > m_file.size()) {
+	if (m_file.isOpen() && (m_fromFrame + 1) * m_imageSize > m_file.size()) {
 		fprintf(stderr, "the file size is too small (expect at least %u, got %llu)\n",
-			m_imageSize, m_file.size());
+			(m_fromFrame + 1) * m_imageSize, m_file.size());
+	}
+
+	if (m_file.isOpen()) {
+		m_file.seek(m_fromFrame * m_imageSize);
+		m_frame = m_fromFrame;
 	}
 
 	for (unsigned p = 0; p < m_v4l_fmt.g_num_planes(); p++) {
@@ -1461,19 +1485,39 @@ void CaptureWin::startTimer()
 				ycbcr_enc2s(ycbcr_encs[m_testState.ycbcr_enc_idx]).c_str(),
 				quantization2s(quantizations[m_testState.quant_idx]).c_str());
 	}
+	m_frame++;
+	if (m_verbose)
+		printf("frame %d\n", m_frame - 1);
 }
 
 void CaptureWin::tpgUpdateFrame()
 {
 	bool is_alt = m_v4l_fmt.g_field() == V4L2_FIELD_ALTERNATE;
 
+	if (m_mode != AppModeTest && m_pause)
+		return;
+
 	if (m_mode != AppModeTest && m_singleStep && m_frame > m_singleStepStart &&
 	    !m_singleStepNext)
 		return;
 	m_singleStepNext = false;
 
-	if (m_mode == AppModeFile && m_file.pos() + m_imageSize > m_file.size())
+	if (m_mode == AppModeFile && m_file.pos() + m_imageSize > m_file.size()) {
+		if (m_no_loop) {
+			static bool done;
+
+			if (!done) {
+				if (m_verbose)
+					printf("done\n");
+				done = true;
+			}
+			return;
+		}
+		if (m_verbose)
+			printf("loop\n");
 		m_file.seek(0);
+		m_frame = 0;
+	}
 
 	if (m_mode != AppModeFile && is_alt) {
 		if (m_tpg.field == V4L2_FIELD_TOP)
@@ -1489,6 +1533,8 @@ void CaptureWin::tpgUpdateFrame()
 			tpg_fillbuffer(&m_tpg, 0, p, m_curData[p]);
 	}
 	m_frame++;
+	if (m_verbose)
+		printf("frame %d\n", m_frame - 1);
 	update();
 	if (m_cnt != 1)
 		tpg_update_mv_count(&m_tpg, is_alt);

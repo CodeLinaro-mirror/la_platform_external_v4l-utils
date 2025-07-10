@@ -30,7 +30,7 @@ Stop after <cnt> captured frames
 Request <bufs> buffers (default 4) when streaming from a video device.
 .TP
 \fB\-s\fR, \fB\-\-single\-step\fR\fI[=<frm>]\fR
-Starting with frame <frm> (default 1), pause after displaying each frame
+Starting with frame <frm> (default 0), pause after displaying each frame
 until Space is pressed.
 .TP
 \fB\-C\fR, \fB\-\-colorspace\fR=\fI<c>\fR
@@ -86,10 +86,16 @@ set additional horizontal padding (after width)
 \fB--fps\fR=\fI<fps>\fR
 Set frames-per-second (default is 30)
 .TP
-The following option is only valid when reading from a file:
+The following options are only valid when reading from a file:
 .TP
 \fB\-F\fR, \fB-\-field\fR=\fI<f>\fR
 Override field setting. <f> can be one of the following field layouts: any, none, top, bottom, interlaced, seq_tb, seq_bt, alternate, interlaced_tb, interlaced_bt
+.TP
+\fB\-\-no\-loop\fR
+Stop at the end of the file, don't loop back to the beginning.
+.TP
+\fB\-\-from\-frame\fR=\fI<frame>\fR
+Start playing back the file at the given frame number (the first frame is frame 0).
 .TP
 The following options are specific to the test pattern generator:
 .TP
@@ -210,7 +216,11 @@ Exit fullscreen.
 .TP
 \fISpace\fR
 When in test mode (\fB\-\-test\fR) pressing Space will skip to the next test.
-When single-stepping, continue to the next frame.
+When single-stepping, continue to the next frame. When reading from a file,
+pause playback until the next press of Space.
+.TP
+\fIBackspace\fR
+When single-stepping, go back to the previous frame.
 .TP
 \fIUp\fR
 Reduce the resolution by two pixels in height. Only available when "Override resolution" is enabled.

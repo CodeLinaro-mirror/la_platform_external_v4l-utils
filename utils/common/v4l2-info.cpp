@@ -91,6 +91,8 @@ static std::string cap2s(unsigned cap)
 		s += "\t\tI/O MC\n";
 	if (cap & V4L2_CAP_READWRITE)
 		s += "\t\tRead/Write\n";
+	if (cap & V4L2_CAP_EDID)
+		s += "\t\tEDID Only\n";
 	if (cap & V4L2_CAP_STREAMING)
 		s += "\t\tStreaming\n";
 	if (cap & V4L2_CAP_EXT_PIX_FORMAT)
@@ -536,6 +538,7 @@ std::string ctrlflags2s(__u32 flags)
 		{ V4L2_CTRL_FLAG_EXECUTE_ON_WRITE, "execute-on-write" },
 		{ V4L2_CTRL_FLAG_MODIFY_LAYOUT, "modify-layout" },
 		{ V4L2_CTRL_FLAG_DYNAMIC_ARRAY, "dynamic-array" },
+		{ V4L2_CTRL_FLAG_HAS_WHICH_MIN_MAX, "has-min-max" },
 		{ 0, nullptr }
 	};
 	return flags2s(flags, def);

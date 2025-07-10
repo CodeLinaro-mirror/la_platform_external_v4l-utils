@@ -139,7 +139,6 @@ filegroup {
         "README.md",
         "TODO",
         "TODO.libdvbv5",
-        "android-config.h",
         "contrib/**/*",
         "doc/Doxyfile.in",
         "doc/libdvbv5-index.doc",
