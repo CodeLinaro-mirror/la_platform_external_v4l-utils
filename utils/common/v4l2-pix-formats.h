@@ -58,6 +58,7 @@
 	case V4L2_PIX_FMT_Y14P: return "14-bit Greyscale (MIPI Packed)";
 	case V4L2_PIX_FMT_Y8I: return "Interleaved 8-bit Greyscale";
 	case V4L2_PIX_FMT_Y12I: return "Interleaved 12-bit Greyscale";
+	case V4L2_PIX_FMT_Y16I: return "Interleaved 16-bit Greyscale";
 	case V4L2_PIX_FMT_Z16: return "16-bit Depth";
 	case V4L2_PIX_FMT_INZI: return "Planar 10:16 Greyscale Depth";
 	case V4L2_PIX_FMT_CNF4: return "4-bit Depth Confidence (Packed)";
@@ -189,6 +190,7 @@
 	case V4L2_META_FMT_VIVID: return "Vivid Metadata";
 	case V4L2_META_FMT_RK_ISP1_PARAMS: return "Rockchip ISP1 3A Parameters";
 	case V4L2_META_FMT_RK_ISP1_STAT_3A: return "Rockchip ISP1 3A Statistics";
+	case V4L2_META_FMT_RK_ISP1_EXT_PARAMS: return "Rockchip ISP1 Ext 3A Params";
 	case V4L2_PIX_FMT_NV12_8L128: return "NV12 (8x128 Linear)";
 	case V4L2_PIX_FMT_NV12M_8L128: return "NV12M (8x128 Linear)";
 	case V4L2_PIX_FMT_NV12_10BE_8L128: return "10-bit NV12 (8x128 Linear, BE)";
@@ -197,6 +199,8 @@
 	case V4L2_PIX_FMT_Y212: return "12-bit YUYV Packed";
 	case V4L2_PIX_FMT_Y216: return "16-bit YUYV Packed";
 	case V4L2_META_FMT_RPI_BE_CFG: return "RPi PiSP BE Config format";
+	case V4L2_META_FMT_RPI_FE_CFG: return "RPi PiSP FE Config format";
+	case V4L2_META_FMT_RPI_FE_STATS: return "RPi PiSP FE Statistics format";
 	case V4L2_PIX_FMT_MJPEG: return "Motion-JPEG";
 	case V4L2_PIX_FMT_JPEG: return "JFIF JPEG";
 	case V4L2_PIX_FMT_DV: return "1394";

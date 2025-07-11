@@ -207,6 +207,8 @@ static struct option long_options[] = {
 	{"overlay", required_argument, nullptr, OptOverlay},
 	{"sleep", required_argument, nullptr, OptSleep},
 	{"list-devices", no_argument, nullptr, OptListDevices},
+	{"list-devices-input", required_argument, nullptr, OptListDevicesInput},
+	{"list-devices-output", required_argument, nullptr, OptListDevicesOutput},
 	{"list-dv-timings", optional_argument, nullptr, OptListDvTimings},
 	{"query-dv-timings", no_argument, nullptr, OptQueryDvTimings},
 	{"get-dv-timings", no_argument, nullptr, OptGetDvTimings},
@@ -300,6 +302,9 @@ static void print_version()
 #define STR(x) #x
 #define STRING(x) STR(x)
 	printf("v4l2-ctl %s%s\n", PACKAGE_VERSION, STRING(GIT_COMMIT_CNT));
+	if (strlen(STRING(GIT_SHA)))
+		printf("v4l2-ctl SHA: %s %s\n",
+		       STRING(GIT_SHA), STRING(GIT_COMMIT_DATE));
 }
 
 int test_ioctl(int fd, unsigned long cmd, void *arg)
@@ -469,8 +474,8 @@ void printfmt(int fd, const struct v4l2_format &vfmt)
 			for (unsigned i = 0; i < vfmt.fmt.win.clipcount; i++) {
 				struct v4l2_rect &r = vfmt.fmt.win.clips[i].c;
 
-				printf("\t\tClip %2d: %ux%u@%ux%u\n", i,
-						r.width, r.height, r.left, r.top);
+				printf("\t\tClip %2d: (%d,%d)/%ux%u\n", i,
+						r.left, r.top, r.width, r.height);
 			}
 		printf("\tClip Bitmap : %s", vfmt.fmt.win.bitmap ? "Yes, " : "No\n");
 		if (vfmt.fmt.win.bitmap) {
@@ -561,15 +566,15 @@ void print_frmsize(const struct v4l2_frmsizeenum &frmsize, const char *prefix)
 {
 	printf("%s\tSize: %s ", prefix, frmtype2s(frmsize.type).c_str());
 	if (frmsize.type == V4L2_FRMSIZE_TYPE_DISCRETE) {
-		printf("%dx%d", frmsize.discrete.width, frmsize.discrete.height);
+		printf("%ux%u", frmsize.discrete.width, frmsize.discrete.height);
 	} else if (frmsize.type == V4L2_FRMSIZE_TYPE_CONTINUOUS) {
-		printf("%dx%d - %dx%d",
+		printf("%ux%u - %ux%u",
 				frmsize.stepwise.min_width,
 				frmsize.stepwise.min_height,
 				frmsize.stepwise.max_width,
 				frmsize.stepwise.max_height);
 	} else if (frmsize.type == V4L2_FRMSIZE_TYPE_STEPWISE) {
-		printf("%dx%d - %dx%d with step %d/%d",
+		printf("%ux%u - %ux%u with step %u/%u",
 				frmsize.stepwise.min_width,
 				frmsize.stepwise.min_height,
 				frmsize.stepwise.max_width,
@@ -602,7 +607,7 @@ void print_frmival(const struct v4l2_frmivalenum &frmival, const char *prefix)
 	}
 }
 
-void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
+void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code, bool enum_all)
 {
 	cv4l_disable_trace dt(fd);
 	struct v4l2_fmtdesc fmt = {};
@@ -611,7 +616,7 @@ void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
 		mbus_code = 0;
 
 	printf("\tType: %s\n\n", buftype2s(type).c_str());
-	if (fd.enum_fmt(fmt, true, 0, type, mbus_code))
+	if (fd.enum_fmt(fmt, true, 0, type, mbus_code, enum_all))
 		return;
 	do {
 		printf("\t[%d]: '%s' (%s", fmt.index, fcc2s(fmt.pixelformat).c_str(),
@@ -623,10 +628,10 @@ void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
 			printf(", %s", fmtdesc2s(fmt.flags, is_hsv).c_str());
 		}
 		printf(")\n");
-	} while (!fd.enum_fmt(fmt));
+	} while (!fd.enum_fmt(fmt, false, 0, type, mbus_code, enum_all));
 }
 
-void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
+void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code, bool enum_all)
 {
 	cv4l_disable_trace dt(fd);
 	struct v4l2_fmtdesc fmt = {};
@@ -637,7 +642,7 @@ void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
 		mbus_code = 0;
 
 	printf("\tType: %s\n\n", buftype2s(type).c_str());
-	if (fd.enum_fmt(fmt, true, 0, type, mbus_code))
+	if (fd.enum_fmt(fmt, true, 0, type, mbus_code, enum_all))
 		return;
 	do {
 		printf("\t[%d]: '%s' (%s", fmt.index, fcc2s(fmt.pixelformat).c_str(),
@@ -649,6 +654,10 @@ void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
 			printf(", %s", fmtdesc2s(fmt.flags, is_hsv).c_str());
 		}
 		printf(")\n");
+
+		if (enum_all)
+			continue;
+
 		if (fd.enum_framesizes(frmsize, fmt.pixelformat))
 			continue;
 		do {
@@ -664,7 +673,7 @@ void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code)
 				print_frmival(frmival, "\t\t");
 			} while (!fd.enum_frameintervals(frmival));
 		} while (!fd.enum_framesizes(frmsize));
-	} while (!fd.enum_fmt(fmt));
+	} while (!fd.enum_fmt(fmt,false, 0, type, mbus_code, enum_all));
 }
 
 int parse_subopt(char **subs, const char * const *subopts, char **value)
@@ -1303,6 +1312,11 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	verbose = options[OptVerbose];
+
+	if (common_list_devices(media_bus_info, c_fd))
+		return 0;
+
 	media_type type = mi_media_detect_type(device);
 	if (type == MEDIA_TYPE_CANT_STAT) {
 		fprintf(stderr, "Cannot open device %s, exiting.\n",
@@ -1346,7 +1360,7 @@ int main(int argc, char **argv)
 			strerror(errno));
 		std::exit(EXIT_FAILURE);
 	}
-	verbose = options[OptVerbose];
+
 	c_fd.s_trace(options[OptSilent] ? 0 : (verbose ? 2 : 1));
 
 	if (!is_subdev && doioctl(fd, VIDIOC_QUERYCAP, &vcap)) {
@@ -1510,7 +1524,7 @@ int main(int argc, char **argv)
 
 	/* List options */
 
-	common_list(media_bus_info, c_fd);
+	common_list(c_fd);
 	io_list(c_fd);
 	stds_list(c_fd);
 	vidcap_list(c_fd);

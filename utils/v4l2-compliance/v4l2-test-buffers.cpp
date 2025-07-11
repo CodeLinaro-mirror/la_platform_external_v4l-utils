@@ -1069,11 +1069,22 @@ int testReadWrite(struct node *node)
 
 static int setupM2M(struct node *node, cv4l_queue &q, bool init = true)
 {
+	unsigned buffers = 2;
 	__u32 caps;
 
 	last_m2m_seq.init();
 
-	fail_on_test(q.reqbufs(node, 2));
+	if (node->codec_mask & STATEFUL_DECODER) {
+		struct v4l2_control ctrl = {
+			.id = V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+		};
+		fail_on_test(node->g_ctrl(ctrl));
+		fail_on_test(ctrl.value <= 0);
+		buffers = ctrl.value;
+		fail_on_test(q.reqbufs(node, 1));
+		fail_on_test((unsigned)ctrl.value < q.g_buffers());
+	}
+	fail_on_test(q.reqbufs(node, buffers));
 	fail_on_test(q.mmap_bufs(node));
 	caps = q.g_capabilities();
 	fail_on_test(node->supports_orphaned_bufs ^ !!(caps & V4L2_BUF_CAP_SUPPORTS_ORPHANED_BUFS));
@@ -1530,7 +1541,7 @@ static int setupMmap(struct node *node, cv4l_queue &q)
 }
 
 int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
-	     enum poll_mode pollmode)
+	     enum poll_mode pollmode, bool use_create_bufs)
 {
 	bool can_stream = node->g_caps() & V4L2_CAP_STREAMING;
 	bool have_createbufs = true;
@@ -1542,6 +1553,8 @@ int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
 
 	buffer_info.clear();
 	for (type = 0; type <= V4L2_BUF_TYPE_LAST; type++) {
+		unsigned reqbufs_buf_count;
+		unsigned buffers = 2;
 		cv4l_fmt fmt;
 
 		if (!(node->valid_buftypes & (1 << type)))
@@ -1570,7 +1583,20 @@ int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
 		fail_on_test(node->streamoff(q.g_type()));
 
 		q.init(type, V4L2_MEMORY_MMAP);
-		fail_on_test(q.reqbufs(node, 2));
+
+		if (node->is_m2m && (node->codec_mask & STATEFUL_ENCODER)) {
+			struct v4l2_control ctrl = {
+				.id = V4L2_CID_MIN_BUFFERS_FOR_OUTPUT,
+			};
+
+			fail_on_test(node->g_ctrl(ctrl));
+			fail_on_test(ctrl.value <= 0);
+			buffers = ctrl.value;
+			fail_on_test(q.reqbufs(node, 1));
+			fail_on_test((unsigned)ctrl.value < q.g_buffers());
+		}
+		fail_on_test(q.reqbufs(node, buffers));
+		reqbufs_buf_count = q.g_buffers();
 		fail_on_test(node->streamoff(q.g_type()));
 		last_seq.init();
 
@@ -1603,14 +1629,17 @@ int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
 
 		ret = q.create_bufs(node, 0);
 		fail_on_test_val(ret != ENOTTY && ret != 0, ret);
-		if (ret == ENOTTY)
+		if (ret == ENOTTY) {
 			have_createbufs = false;
+			if (use_create_bufs)
+				return ENOTTY;
+		}
 		if (have_createbufs) {
 			q.reqbufs(node);
 			q.create_bufs(node, 2, &cur_fmt, V4L2_MEMORY_FLAG_NON_COHERENT);
 			fail_on_test(setupMmap(node, q));
 			q.munmap_bufs(node);
-			q.reqbufs(node, 2);
+			q.reqbufs(node, buffers);
 
 			cv4l_fmt fmt(cur_fmt);
 
@@ -1621,9 +1650,13 @@ int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
 					fmt.s_sizeimage(fmt.g_sizeimage(p) / 2, p);
 				fail_on_test(q.create_bufs(node, 1, &fmt) != EINVAL);
 				fail_on_test(testQueryBuf(node, cur_fmt.type, q.g_buffers()));
+				q.reqbufs(node);
+				fail_on_test(q.create_bufs(node, 1, &fmt) != EINVAL);
+				fail_on_test(testQueryBuf(node, cur_fmt.type, q.g_buffers()));
 				fmt = cur_fmt;
 				for (unsigned p = 0; p < fmt.g_num_planes(); p++)
 					fmt.s_sizeimage(fmt.g_sizeimage(p) * 2, p);
+				q.reqbufs(node, buffers);
 			}
 			fail_on_test(q.create_bufs(node, 1, &fmt));
 			if (node->is_video) {
@@ -1633,7 +1666,30 @@ int testMmap(struct node *node, struct node *node_m2m_cap, unsigned frame_count,
 				for (unsigned p = 0; p < fmt.g_num_planes(); p++)
 					fail_on_test(buf.g_length(p) < fmt.g_sizeimage(p));
 			}
-			fail_on_test(q.reqbufs(node, 2));
+			fail_on_test(q.reqbufs(node));
+			if (use_create_bufs) {
+				fmt = cur_fmt;
+				if (node->is_video)
+					for (unsigned p = 0; p < fmt.g_num_planes(); p++)
+						fmt.s_sizeimage(fmt.g_sizeimage(p) + 10240, p);
+				q.create_bufs(node, reqbufs_buf_count - 1, &fmt);
+				q.create_bufs(node, 1, &fmt);
+				fail_on_test(q.g_buffers() != reqbufs_buf_count);
+				if (node->is_video) {
+					for (unsigned b = 0; b < q.g_buffers(); b++) {
+						buffer buf(q);
+
+						fail_on_test(buf.querybuf(node, b));
+						for (unsigned p = 0; p < fmt.g_num_planes(); p++)
+							fail_on_test(buf.g_length(p) != fmt.g_sizeimage(p));
+					}
+				}
+				fail_on_test(q.reqbufs(node));
+				q.create_bufs(node, reqbufs_buf_count, &cur_fmt);
+				fail_on_test(q.g_buffers() != reqbufs_buf_count);
+			} else {
+				fail_on_test(q.reqbufs(node, reqbufs_buf_count));
+			}
 		}
 		if (v4l_type_is_output(type))
 			stream_for_fmt(cur_fmt.g_pixelformat());
@@ -2699,14 +2755,16 @@ int testRequests(struct node *node, bool test_streaming)
 			break;
 		}
 		fail_on_test_val(ret, ret);
-		fail_on_test(buf.querybuf(node, i));
-		// Check that the buffer is now queued up
-		fail_on_test(buf.g_flags() & V4L2_BUF_FLAG_IN_REQUEST);
-		fail_on_test(!(buf.g_flags() & V4L2_BUF_FLAG_REQUEST_FD));
-		fail_on_test(!(buf.g_flags() & V4L2_BUF_FLAG_QUEUED));
-		// Re-initing or requeuing the request is no longer possible
-		fail_on_test(doioctl_fd(buf_req_fds[i], MEDIA_REQUEST_IOC_REINIT, nullptr) != EBUSY);
-		fail_on_test(doioctl_fd(buf_req_fds[i], MEDIA_REQUEST_IOC_QUEUE, nullptr) != EBUSY);
+		if (i < min_bufs) {
+			fail_on_test(buf.querybuf(node, i));
+			// Check that the buffer is now queued up (i.e. no longer 'IN_REQUEST')
+			fail_on_test(buf.g_flags() & V4L2_BUF_FLAG_IN_REQUEST);
+			fail_on_test(!(buf.g_flags() & V4L2_BUF_FLAG_REQUEST_FD));
+			fail_on_test(!(buf.g_flags() & V4L2_BUF_FLAG_QUEUED));
+			// Re-initing or requeuing the request is no longer possible
+			fail_on_test(doioctl_fd(buf_req_fds[i], MEDIA_REQUEST_IOC_REINIT, nullptr) != EBUSY);
+			fail_on_test(doioctl_fd(buf_req_fds[i], MEDIA_REQUEST_IOC_QUEUE, nullptr) != EBUSY);
+		}
 		if (i >= min_bufs) {
 			// Close some of the request fds to check that this
 			// is safe to do
@@ -3030,6 +3088,9 @@ static int testBlockingDQBuf(struct node *node, cv4l_queue &q)
 	/*
 	 * This test checks if a blocking wait in VIDIOC_DQBUF doesn't block
 	 * other ioctls.
+	 *
+	 * If this fails, check that the vb2_ops wait_prepare/finish callbacks
+	 * are set.
 	 */
 	fflush(stdout);
 	thread_dqbuf.start();
@@ -3058,7 +3119,7 @@ int testBlockingWait(struct node *node)
 	bool can_stream = node->g_caps() & V4L2_CAP_STREAMING;
 	int type;
 
-	if (!can_stream || !node->valid_buftypes)
+	if (!can_stream || node->is_io_mc || !node->valid_buftypes)
 		return ENOTTY;
 
 	buffer_info.clear();
@@ -3315,15 +3376,15 @@ static void streamFmtRun(struct node *node, cv4l_fmt &fmt, unsigned frame_count,
 
 	if (has_crop) {
 		node->g_frame_selection(crop, fmt.g_field());
-		sprintf(s_crop, "Crop %ux%u@%ux%u, ",
-				crop.r.width, crop.r.height,
-				crop.r.left, crop.r.top);
+		sprintf(s_crop, "Crop (%d,%d)/%ux%u, ",
+				crop.r.left, crop.r.top,
+				crop.r.width, crop.r.height);
 	}
 	if (has_compose) {
 		node->g_frame_selection(compose, fmt.g_field());
-		sprintf(s_compose, "Compose %ux%u@%ux%u, ",
-				compose.r.width, compose.r.height,
-				compose.r.left, compose.r.top);
+		sprintf(s_compose, "Compose (%d,%d)/%ux%u, ",
+				compose.r.left, compose.r.top,
+				compose.r.width, compose.r.height);
 	}
 	printf("\r\t\t%s%sStride %u, Field %s%s: %s   \n",
 			s_crop, s_compose,
@@ -3668,14 +3729,14 @@ static void streamM2MRun(struct node *node, unsigned frame_count)
 	node->g_fmt(out_fmt, out_type);
 	if (!no_progress)
 		printf("\r");
-	printf("\t%s (%s) %dx%d -> %s (%s) %dx%d: %s\n",
+	printf("\t%s (%s) %ux%u -> %s (%s) %ux%u: %s\n",
 	       fcc2s(out_fmt.g_pixelformat()).c_str(),
 	       pixfmt2s(out_fmt.g_pixelformat()).c_str(),
 	       out_fmt.g_width(), out_fmt.g_height(),
 	       fcc2s(cap_fmt.g_pixelformat()).c_str(),
 	       pixfmt2s(cap_fmt.g_pixelformat()).c_str(),
 	       cap_fmt.g_width(), cap_fmt.g_height(),
-	       ok(testMmap(node, node, frame_count, POLL_MODE_SELECT)));
+	       ok(testMmap(node, node, frame_count, POLL_MODE_SELECT, false)));
 }
 
 static int streamM2MOutFormat(struct node *node, __u32 pixelformat, __u32 w, __u32 h,

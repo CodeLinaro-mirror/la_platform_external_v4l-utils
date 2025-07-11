@@ -35,8 +35,6 @@ elif [ -f .config ]; then
 	fi
 fi
 
-cur_lvl=`cut -c 1-2 /proc/sys/kernel/printk`
-
 if [ -z "$1" ]; then
 	echo "usage: test-media [options] test-targets"
 	echo
@@ -49,6 +47,7 @@ if [ -z "$1" ]; then
 	echo "-E: exit on fail"
 	echo "-W: exit on warn"
 	echo "-32: use v4l2-ctl-32 and v4l2-compliance-32 to test the 32 bit compat layer"
+	echo "-32-time64: use v4l2-ctl-32-time64 and v4l2-compliance-32-time64 to test the 32 bit compat layer with 64 bit time_t"
 	echo "-setup: load and configure all the drivers, but do not run tests"
 	echo
 	echo Test Targets:
@@ -102,6 +101,23 @@ while [ ! -z "$1" ]; do
 			echo /sys/kernel/debug/kmemleak not found, disable memleak testing
 		fi
 		;;
+	-32-time64)
+		v4l2_ctl=v4l2-ctl-32-time64
+		v4l2_compliance=v4l2-compliance-32-time64
+		if ! which $v4l2_ctl >/dev/null ; then
+			echo v4l2-ctl-32-time64 is not installed.
+			exit 0
+		fi
+		if ! which $v4l2_compliance >/dev/null ; then
+			echo v4l2-compliance-32-time64 is not installed.
+			exit 0
+		fi
+		if ! `$v4l2_compliance --version | grep -q "64-bit time_t"` ; then
+			echo $v4l2_compliance is not using 64 bit time_t:
+			$v4l2_compliance --version
+			exit 0
+		fi
+		;;
 	-32)
 		v4l2_ctl=v4l2-ctl-32
 		v4l2_compliance=v4l2-compliance-32
@@ -111,6 +127,11 @@ while [ ! -z "$1" ]; do
 		fi
 		if ! which $v4l2_compliance >/dev/null ; then
 			echo v4l2-compliance-32 is not installed.
+			exit 0
+		fi
+		if ! `$v4l2_compliance --version | grep -q "32-bit time_t"` ; then
+			echo $$v4l2_compliance is not using 32 bit time_t:
+			$v4l2_compliance --version
 			exit 0
 		fi
 		;;
@@ -188,7 +209,7 @@ if [ $kobj_rel -eq 1 ]; then
 	unbind_time=10
 	reunbind_time=14
 	rmmod_time=10
-	modprobe_time=10
+	modprobe_time=15
 fi
 
 if [ $unload -eq 1 ]; then
@@ -254,78 +275,6 @@ if [ $vivid -eq 1 -a $setup -eq 0 ]; then
 	echo
 fi
 
-if [ $visl -eq 1 -a $setup -eq 0 ]; then
-	echo
-	echo loading visl module | tee /dev/kmsg
-	dmesg -n info
-	modprobe visl
-	sleep $modprobe_time
-	dmesg -n notice
-	echo
-	echo visl compliance tests | tee /dev/kmsg
-	echo
-	date
-	stdbuf -oL $v4l2_compliance -m platform:visl -P -s10 -a 2>&1 | tee -a $tmp
-	echo
-	echo unbind visl | tee /dev/kmsg
-	echo
-	echo -n visl.0 >/sys/bus/platform/drivers/visl/unbind
-	sleep $unbind_time
-	echo
-	echo rebind visl | tee /dev/kmsg
-	echo
-	echo -n visl.0 >/sys/bus/platform/drivers/visl/bind
-	sleep 1
-	echo
-	echo second unbind visl | tee /dev/kmsg
-	echo
-	for i in `$v4l2_ctl -z platform:visl --list-devices`; do
-		let "t = 1 + $RANDOM / 4096"
-		echo $i: sleep ${t}s
-		sleep $t <$i &
-	done
-	sleep 1
-	echo
-	echo -n visl.0 >/sys/bus/platform/drivers/visl/unbind
-	sleep $reunbind_time
-	echo
-	echo rmmod visl | tee /dev/kmsg
-	echo
-	rmmod visl
-	sleep $rmmod_time
-
-	if [ $kmemleak -eq 1 ]; then
-		echo
-		echo kmemleak results for visl:
-		echo
-		echo scan >/sys/kernel/debug/kmemleak
-		cat /sys/kernel/debug/kmemleak
-		echo
-		echo end of kmemleak results
-		echo
-	fi
-
-	dmesg -n info
-	modprobe visl
-	sleep $modprobe_time
-	dmesg -n notice
-
-	$v4l2_ctl -z platform:visl --all
-
-	if [ $kmemleak -eq 1 ]; then
-		echo clear >/sys/kernel/debug/kmemleak
-	fi
-	echo
-	echo
-	echo
-	echo
-	echo
-	echo
-	echo
-	echo
-fi
-
-
 if [ $cec -eq 1 ]; then
 	dmesg -n notice
 	cec-ctl --version
@@ -354,12 +303,18 @@ if [ $cec -eq 1 -a $setup -eq 0 ]; then
 	cec-follower -s -D vivid -a vivid-000-vid-out0 2>&1 >/dev/null &
 	f1=$!
 	date
-	# Once vivid is properly handling Arbitration Lost situation, then
-	# we can add back the -A option for the cec-compliance commands.
 	stdbuf -oL cec-compliance $compliance_args -D vivid -a vivid-000-vid-cap0 -r4 -t10 $cecpwr 2>&1 | tee -a $tmp
 	sleep 5
 	date
 	stdbuf -oL cec-compliance $compliance_args -D vivid -a vivid-000-vid-out0 -r0 -t10 $cecpwr 2>&1 | tee -a $tmp
+	sleep 5
+	date
+	stdbuf -oL cec-compliance $compliance_args -D vivid -a vivid-000-vid-cap0 -A 2>&1 | tee -a $tmp
+	sleep 5
+	date
+	cec-ctl -D vivid -a vivid-000-vid-cap0 --tv
+	stdbuf -oL cec-compliance $compliance_args -D vivid -a vivid-000-vid-out0 -A 2>&1 | tee -a $tmp
+	cec-ctl -D vivid -a vivid-000-vid-out0 --playback
 	kill $f0
 	kill $f1
 	echo
@@ -385,7 +340,24 @@ if [ $vivid -eq 1 -a $setup -eq 0 ]; then
 	echo -n vivid.0 >/sys/bus/platform/drivers/vivid/bind
 	sleep 1
 	echo
+
 	echo second unbind vivid | tee /dev/kmsg
+	echo
+	# Test that you can unbind while in a blocking VIDIOC_DQBUF
+	$v4l2_ctl -z platform:vivid-000 -d vivid-000-vid-cap -c percentage_of_dropped_buffers=100
+	$v4l2_ctl -z platform:vivid-000 -d vivid-000-vid-cap --stream-mmap &
+	sleep 1
+	echo
+	echo -n vivid.0 >/sys/bus/platform/drivers/vivid/unbind
+	sleep $unbind_time
+	echo
+	echo rebind vivid | tee /dev/kmsg
+	echo
+	echo -n vivid.0 >/sys/bus/platform/drivers/vivid/bind
+	sleep 1
+	echo
+
+	echo third unbind vivid | tee /dev/kmsg
 	echo
 	for i in `$v4l2_ctl -z platform:vivid-000 --list-devices` `cec-ctl -D vivid -a vivid-000-vid-cap0 -s --list-devices` `cec-ctl -D vivid -a vivid-000-vid-out0 -s --list-devices`; do
 		let "t = 1 + $RANDOM / 4096"
@@ -453,6 +425,43 @@ fi
 if [ $vim2m -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo vim2m compliance tests | tee /dev/kmsg
+	echo
+	date
+	stdbuf -oL $v4l2_compliance -m platform:vim2m -z platform:vivid-002 -e vivid-002-vid-cap -s10 -P -a 2>&1 | tee -a $tmp
+	echo
+	echo
+	echo
+	echo
+	echo rmmod vim2m | tee /dev/kmsg
+	echo
+	rmmod vim2m
+	sleep $rmmod_time
+	if [ $kmemleak -eq 1 ]; then
+		echo
+		echo kmemleak results for vim2m:
+		echo
+		echo scan >/sys/kernel/debug/kmemleak
+		cat /sys/kernel/debug/kmemleak
+		echo
+		echo end of kmemleak results
+		echo clear >/sys/kernel/debug/kmemleak
+	fi
+
+	dmesg -n info
+	modprobe vim2m multiplanar=2
+	sleep $modprobe_time
+	dmesg -n notice
+
+	if ! $v4l2_ctl -z platform:vim2m ; then
+		echo "FAIL: the vim2m module failed to load" | tee -a $tmp
+		echo "Grand Total for vim2m: Succeeded: 0, Failed: 1, Warnings: 0" | tee -a $tmp
+		echo "Final Summary: 1, Succeeded: 0, Failed: 1, Warnings: 0"
+		rmmod vivid
+		exit 0
+	fi
+
+	echo
+	echo vim2m multiplanar compliance tests | tee /dev/kmsg
 	echo
 	date
 	stdbuf -oL $v4l2_compliance -m platform:vim2m -z platform:vivid-002 -e vivid-002-vid-cap -s10 -P -a 2>&1 | tee -a $tmp
@@ -669,11 +678,13 @@ if [ $vicodec -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo vicodec encoder compliance tests | tee /dev/kmsg
 	echo
+	date
 	stdbuf -oL $v4l2_compliance -z platform:vicodec -d stateful-encoder-source -z platform:vivid-002 -e vivid-002-vid-cap -s10 -P -a 2>&1 | tee -a $tmp
 
 	echo
 	echo vicodec decoder compliance tests | tee /dev/kmsg
 	echo
+	date
 	decful_opts='-z platform:vicodec -d stateful-decoder-source -z platform:vivid-002 -e vivid-002-vid-cap'
 	stdbuf -oL $v4l2_compliance $decful_opts --stream-from-hdr=$tmpdir/comp.hdr.yu12.1280.24 -s24 -P -a 2>&1 | tee -a $tmp
 	stdbuf -oL $v4l2_compliance $decful_opts --stream-from $tmpdir/comp.yu12.1280.24 -s24 -P -a 2>&1 | tee -a $tmp
@@ -690,10 +701,12 @@ if [ $vicodec -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo stateful decode | tee /dev/kmsg
 	echo
+	date
 	$v4l2_ctl $decful_opts --stream-from-hdr=$tmpdir/comp.hdr.yu12.1280.24 --stream-to=$tmpdir/raw.yu12.1280.24
 	echo
 	echo stateless decode | tee /dev/kmsg
 	echo
+	date
 	$v4l2_ctl $decless_opts --stream-from-hdr=$tmpdir/comp.hdr.yu12.1280.24 --stream-to=$tmpdir/raw.yu12.1280.24.stateless
 	vicodec_tests=$((vicodec_tests+1))
 	if cmp $tmpdir/raw.yu12.1280.24 $tmpdir/raw.yu12.1280.24.stateless ; then
@@ -707,6 +720,7 @@ if [ $vicodec -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo stateful decode with dynamic resolution changes for every frame | tee /dev/kmsg
 	echo
+	date
 	$v4l2_ctl $decful_opts --stream-from-hdr=$tmpdir/comp.hdr.yu12.mix.2.12 --stream-to=$tmpdir/raw.yu12.mix.2.12
 	# v4l2-ctl does not yet reallocate buffers if they are too small for the new format
 	$v4l2_ctl $decless_opts -v width=1920,height=1088 --stream-from-hdr=$tmpdir/comp.hdr.yu12.mix.2.12 --stream-to=$tmpdir/raw.yu12.mix.2.12.stateless
@@ -722,6 +736,7 @@ if [ $vicodec -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo stateful decode with dynamic resolution changes for every other frame | tee /dev/kmsg
 	echo
+	date
 	$v4l2_ctl $decful_opts --stream-from-hdr=$tmpdir/comp.hdr.yu12.mix.4.6 --stream-to=$tmpdir/raw.yu12.mix.4.6
 	# v4l2-ctl does not yet reallocate buffers if they are too small for the new format
 	$v4l2_ctl $decless_opts -v width=1920,height=1088 --stream-from-hdr=$tmpdir/comp.hdr.yu12.mix.4.6 --stream-to=$tmpdir/raw.yu12.mix.4.6.stateless
@@ -790,6 +805,90 @@ if [ $vicodec -eq 1 -a $setup -eq 0 ]; then
 	echo
 	echo
 fi
+
+
+if [ $visl -eq 1 ]; then
+	echo
+	echo loading visl module | tee /dev/kmsg
+	dmesg -n info
+	modprobe visl
+	sleep $modprobe_time
+	dmesg -n notice
+
+	if ! $v4l2_ctl -z platform:visl ; then
+		echo "FAIL: the visl module failed to load" | tee -a $tmp
+		echo "Grand Total for visl: Succeeded: 0, Failed: 1, Warnings: 0" | tee -a $tmp
+		echo "Final Summary: 1, Succeeded: 0, Failed: 1, Warnings: 0"
+		rmmod vivid
+		exit 0
+	fi
+fi
+
+if [ $visl -eq 1 -a $setup -eq 0 ]; then
+	echo
+	echo visl compliance tests | tee /dev/kmsg
+	echo
+	date
+	stdbuf -oL $v4l2_compliance -m platform:visl -P -s10 -a 2>&1 | tee -a $tmp
+	echo
+	echo unbind visl | tee /dev/kmsg
+	echo
+	echo -n visl.0 >/sys/bus/platform/drivers/visl/unbind
+	sleep $unbind_time
+	echo
+	echo rebind visl | tee /dev/kmsg
+	echo
+	echo -n visl.0 >/sys/bus/platform/drivers/visl/bind
+	sleep 1
+	echo
+	echo second unbind visl | tee /dev/kmsg
+	echo
+	for i in `$v4l2_ctl -z platform:visl --list-devices`; do
+		let "t = 1 + $RANDOM / 4096"
+		echo $i: sleep ${t}s
+		sleep $t <$i &
+	done
+	sleep 1
+	echo
+	echo -n visl.0 >/sys/bus/platform/drivers/visl/unbind
+	sleep $reunbind_time
+	echo
+	echo rmmod visl | tee /dev/kmsg
+	echo
+	rmmod visl
+	sleep $rmmod_time
+
+	if [ $kmemleak -eq 1 ]; then
+		echo
+		echo kmemleak results for visl:
+		echo
+		echo scan >/sys/kernel/debug/kmemleak
+		cat /sys/kernel/debug/kmemleak
+		echo
+		echo end of kmemleak results
+		echo
+	fi
+
+	dmesg -n info
+	modprobe visl
+	sleep $modprobe_time
+	dmesg -n notice
+
+	$v4l2_ctl -z platform:visl --all
+
+	if [ $kmemleak -eq 1 ]; then
+		echo clear >/sys/kernel/debug/kmemleak
+	fi
+	echo
+	echo
+	echo
+	echo
+	echo
+	echo
+	echo
+	echo
+fi
+
 
 if [ $vidtv -eq 1 ]; then
 	rmmod dvb_vidtv_bridge dvb_vidtv_tuner dvb_vidtv_demod 2&>/dev/null
@@ -915,5 +1014,5 @@ if [ $setup -eq 0 ]; then
 	fi
 fi
 
-dmesg -n $cur_lvl
+dmesg -n info
 date

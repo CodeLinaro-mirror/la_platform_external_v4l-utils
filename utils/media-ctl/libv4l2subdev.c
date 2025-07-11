@@ -829,6 +829,8 @@ static struct media_pad *v4l2_subdev_parse_pad_format(
 			}
 
 			format->colorspace = colorspace;
+			if (pad->flags & MEDIA_PAD_FL_SOURCE)
+				format->flags |= V4L2_MBUS_FRAMEFMT_SET_CSC;
 
 			p = end;
 			continue;
@@ -857,6 +859,8 @@ static struct media_pad *v4l2_subdev_parse_pad_format(
 			}
 
 			format->xfer_func = xfer_func;
+			if (pad->flags & MEDIA_PAD_FL_SOURCE)
+				format->flags |= V4L2_MBUS_FRAMEFMT_SET_CSC;
 
 			p = end;
 			continue;
@@ -885,6 +889,8 @@ static struct media_pad *v4l2_subdev_parse_pad_format(
 			}
 
 			format->ycbcr_enc = ycbcr_enc;
+			if (pad->flags & MEDIA_PAD_FL_SOURCE)
+				format->flags |= V4L2_MBUS_FRAMEFMT_SET_CSC;
 
 			p = end;
 			continue;
@@ -913,6 +919,8 @@ static struct media_pad *v4l2_subdev_parse_pad_format(
 			}
 
 			format->quantization = quantization;
+			if (pad->flags & MEDIA_PAD_FL_SOURCE)
+				format->flags |= V4L2_MBUS_FRAMEFMT_SET_CSC;
 
 			p = end;
 			continue;
@@ -1011,7 +1019,7 @@ static int set_selection(struct media_pad *pad, unsigned int stream,
 		return 0;
 
 	media_dbg(pad->entity->media,
-		  "Setting up selection target %u rectangle (%u,%u)/%ux%u on pad %s/%u/%u\n",
+		  "Setting up selection target %u rectangle (%d,%d)/%ux%u on pad %s/%u/%u\n",
 		  target, rect->left, rect->top, rect->width, rect->height,
 		  pad->entity->info.name, pad->index, stream);
 
@@ -1025,7 +1033,7 @@ static int set_selection(struct media_pad *pad, unsigned int stream,
 	}
 
 	media_dbg(pad->entity->media,
-		  "Selection rectangle set: (%u,%u)/%ux%u\n",
+		  "Selection rectangle set: (%d,%d)/%ux%u\n",
 		  rect->left, rect->top, rect->width, rect->height);
 
 	return 0;
@@ -1165,6 +1173,7 @@ static const struct {
 	{ "Y8", MEDIA_BUS_FMT_Y8_1X8 },
 	{ "Y10", MEDIA_BUS_FMT_Y10_1X10 },
 	{ "Y12", MEDIA_BUS_FMT_Y12_1X12 },
+	{ "Y16", MEDIA_BUS_FMT_Y16_1X16 },
 	{ "YUYV", MEDIA_BUS_FMT_YUYV8_1X16 },
 	{ "YUYV1_5X8", MEDIA_BUS_FMT_YUYV8_1_5X8 },
 	{ "YUYV2X8", MEDIA_BUS_FMT_YUYV8_2X8 },

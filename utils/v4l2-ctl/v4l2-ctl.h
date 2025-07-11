@@ -44,6 +44,7 @@ private:
    In general the lower case is used to set something and the upper
    case is used to retrieve a setting. */
 enum Option {
+	OptListDevices = 'A',
 	OptGetSlicedVbiFormat = 'B',
 	OptSetSlicedVbiFormat = 'b',
 	OptGetCtrl = 'C',
@@ -172,7 +173,8 @@ enum Option {
 	OptGetModulator,
 	OptSetModulator,
 	OptListFreqBands,
-	OptListDevices,
+	OptListDevicesInput,
+	OptListDevicesOutput,
 	OptGetOutputParm,
 	OptSetOutputParm,
 	OptQueryStandard,
@@ -315,8 +317,8 @@ bool valid_pixel_format(int fd, __u32 pixelformat, bool output, bool mplane);
 void print_frmsize(const struct v4l2_frmsizeenum &frmsize, const char *prefix);
 void print_frmival(const struct v4l2_frmivalenum &frmival, const char *prefix);
 void printfmt(int fd, const struct v4l2_format &vfmt);
-void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code);
-void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code);
+void print_video_formats(cv4l_fd &fd, __u32 type, unsigned int mbus_code, bool enum_all);
+void print_video_formats_ext(cv4l_fd &fd, __u32 type, unsigned int mbus_code, bool enum_all);
 
 static inline bool subscribe_event(cv4l_fd &fd, __u32 type)
 {
@@ -348,7 +350,8 @@ void common_usage(void);
 void common_cmd(int ch, char *optarg);
 void common_set(cv4l_fd &fd);
 void common_get(cv4l_fd &fd);
-void common_list(const std::string &media_bus_info, cv4l_fd &fd);
+bool common_list_devices(const std::string &media_bus_info, cv4l_fd &fd);
+void common_list(cv4l_fd &fd);
 void common_process_controls(cv4l_fd &fd);
 void common_control_event(int fd, const struct v4l2_event *ev);
 int common_find_ctrl_id(const char *name);

@@ -151,15 +151,18 @@ struct remote {
 struct node {
 	int fd;
 	const char *device;
+	bool is_vivid;
 	bool has_cec20;
 	unsigned caps;
 	unsigned available_log_addrs;
 	unsigned num_log_addrs;
 	unsigned adap_la_mask;
 	__u8 log_addr[CEC_MAX_LOG_ADDRS];
+	__u32 msg_fl_mask;
 	unsigned remote_la_mask;
 	struct remote remote[16];
 	__u16 phys_addr;
+	__u32 vendor_id;
 	bool in_standby;
 	__u8 prim_devtype;
 	time_t current_time;
@@ -198,13 +201,16 @@ using vec_remote_subtests = std::vector<remote_subtest>;
 
 #define info(fmt, args...) 						\
 	do {								\
-		if (show_info)						\
+		if (show_info) {					\
 			printf("\t\tinfo: " fmt, ##args);		\
+			fflush(stdout);					\
+		}							\
 	} while (0)
 
 #define announce(fmt, args...) 						\
 	do {								\
 		printf("\t\t>>> " fmt "\n", ##args);			\
+		fflush(stdout);						\
 	} while (0)
 
 #define interactive_info(block, fmt, args...)				\
@@ -221,10 +227,12 @@ using vec_remote_subtests = std::vector<remote_subtest>;
 #define warn(fmt, args...) 						\
 ({									\
 	warnings++;							\
-	if (show_warnings)						\
+	if (show_warnings) {						\
 		printf("\t\%s: %s(%d): " fmt,				\
 		       show_colors ? COLOR_BOLD("warn") : "warn",	\
-		       __FILE_NAME__, __LINE__, ##args);			\
+		       __FILE_NAME__, __LINE__, ##args);		\
+		fflush(stdout);						\
+	}								\
 	if (exit_on_warn)						\
 		std::exit(EXIT_FAILURE);				\
 	0;								\
@@ -256,6 +264,7 @@ using vec_remote_subtests = std::vector<remote_subtest>;
 ({ 									\
 	printf("\t\t%s: %s(%d): " fmt, show_colors ?			\
 	       COLOR_RED("fail") : "fail", __FILE_NAME__, __LINE__, ##args);	\
+	fflush(stdout);							\
 	if (exit_on_fail)						\
 		std::exit(EXIT_FAILURE);				\
 	FAIL;								\
