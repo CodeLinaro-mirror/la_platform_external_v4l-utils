@@ -50,6 +50,13 @@ cc_defaults {
 }
 
 cc_binary {
+    name: "v4l2-compliance",
+    defaults: ["v4l-utils.cc_defaults"],
+    srcs: ["utils/v4l2-compliance/*.cpp"],
+    vendor: true,
+}
+
+cc_binary {
     name: "v4l2-compliance_static",
     defaults: ["v4l-utils.cc_defaults"],
     srcs: ["utils/v4l2-compliance/*.cpp"],
@@ -92,6 +99,17 @@ genrule {
     tool_files: ["utils/gen_media_bus_format_codes.sh"],
     out: ["media-bus-format-codes.h"],
     cmd: "$(location) $(in) > $(out)",
+}
+
+cc_binary {
+    name: "media-ctl",
+    defaults: ["v4l-utils.cc_defaults"],
+    generated_headers: [
+        "media_bus_format_codes_header",
+        "media_bus_format_names_header",
+    ],
+    srcs: ["utils/media-ctl/*.c"],
+    vendor: true,
 }
 
 cc_binary {
