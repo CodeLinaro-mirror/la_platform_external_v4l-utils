@@ -15,7 +15,7 @@ third_party {
   identifier {
     type: "Git"
     value: "https://git.linuxtv.org/v4l-utils.git"
-    version: "fc3cac55a2bb4bb27ad692d50f64952b278f4241"
+    version: "41ebf71356916d4b3c8c41dbf8235b71d6769a94"
     closest_version: "v4l-utils-1.30.0"
     primary_source: true
   }
