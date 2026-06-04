@@ -475,13 +475,10 @@ static ssize_t send_data(int fd, const char *fmt, ...)
 	return send_buf(fd, buf, ret);
 }
 
-static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
-	__attribute__ (( format( scanf, 3, 4 )));
-
-static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
+static ssize_t scan_data(char *buf, size_t buf_size, const char *fmt, ...)
 {
 	char *p = buf, *endp = &buf[buf_size], *s;
-	int len;
+	size_t len, max_len;
 	int32_t *i32;
 	uint64_t *u64;
 	va_list ap;
@@ -493,17 +490,24 @@ static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
 		switch (*fmt++) {
 		case 's':              /* string */
 			s = va_arg(ap, char *);
+			max_len = va_arg(ap, size_t);
 			if (p + 4 > endp) {
 				dbg("buffer to short for string length");
 				stack_dump();
-				return -1;
+				goto error;
 			}
-			len = be32toh(*(int32_t *)p);
+			len = be32toh(*(uint32_t *)p);
 			p += 4;
-			if (p + len > endp) {
+			if (len > (size_t)(endp - p)) {
 				dbg("buffer to short for string");
 				stack_dump();
-				return -1;
+				goto error;
+			}
+			if (len >= max_len) {
+				dbg("string length %zu exceeds destination size %zu",
+				    len, max_len);
+				stack_dump();
+				goto error;
 			}
 
 			memcpy(s, p, len);
@@ -514,7 +518,7 @@ static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
 			if (p + 4 > endp) {
 				dbg("buffer to short for int32_t");
 				stack_dump();
-				return -1;
+				goto error;
 			}
 			i32 = va_arg(ap, int32_t *);
 
@@ -530,7 +534,7 @@ static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
 			if (p + 8 > endp) {
 				dbg("buffer to short for uint64_t");
 				stack_dump();
-				return -1;
+				goto error;
 			}
 			u64 = va_arg(ap, uint64_t *);
 
@@ -547,6 +551,10 @@ static ssize_t scan_data(char *buf, int buf_size, const char *fmt, ...)
 	va_end(ap);
 
 	return p - buf;
+
+error:
+	va_end(ap);
+	return -1;
 }
 
 /*
@@ -652,7 +660,7 @@ static int dev_get_dev_info(uint32_t seq, char *cmd, int fd,
 	char sysname[REMOTE_BUF_SIZE];
 	int ret;
 
-	ret = scan_data(buf, size, "%s", sysname);
+	ret = scan_data(buf, size, "%s", sysname, sizeof(sysname));
 	if (ret < 0)
 		goto error;
 
@@ -788,7 +796,7 @@ static int dev_open(uint32_t seq, char *cmd, int fd, char *buf, ssize_t size)
 		goto error;
 	}
 
-	ret = scan_data(buf, size, "%s%i", sysname, &flags);
+	ret = scan_data(buf, size, "%s%i", sysname, sizeof(sysname), &flags);
 	if (ret < 0) {
 		free(desc);
 		goto error;
@@ -971,7 +979,10 @@ static int dev_dmx_set_section_filter(uint32_t seq, char *cmd, int fd,
 	unsigned char filter[17], mask[17], mode[17];
 
 	ret = scan_data(buf, size, "%i%i%i%s%s%s%i",
-			&uid, &pid, &filtsize, filter, mask, mode, &flags);
+			&uid, &pid, &filtsize,
+			(char *)filter, sizeof(filter),
+			(char *)mask, sizeof(mask),
+			(char *)mode, sizeof(mode), &flags);
 	if (ret < 0)
 		goto error;
 
@@ -1168,9 +1179,11 @@ static int dev_set_parms(uint32_t seq, char *cmd, int fd,
 		old_lnb = par->lnb->name;
 
 	ret = scan_data(p, size, "%i%i%s%i%i%i%i%s%s",
-			&par->abort, &par->lna, new_lnb,
+			&par->abort, &par->lna, new_lnb, sizeof(new_lnb),
 			&par->sat_number, &par->freq_bpf, &par->diseqc_wait,
-			&par->verbose, default_charset, output_charset);
+			&par->verbose,
+			default_charset, sizeof(default_charset),
+			output_charset, sizeof(output_charset));
 
 	if (ret < 0)
 		goto error;
@@ -1341,7 +1354,7 @@ static void *start_server(void *fd_pointer)
 	int fd = *(int *)fd_pointer, ret, flag = 1;
 	char buf[REMOTE_BUF_SIZE + 8], cmd[CMD_SIZE], *p;
 	ssize_t size;
-	uint32_t seq;
+	uint32_t frame_size, seq;
 	int bufsize;
 
 	if (verbose)
@@ -1364,13 +1377,21 @@ static void *start_server(void *fd_pointer)
 		size = recv(fd, buf, 4, MSG_WAITALL);
 		if (size <= 0)
 			break;
-		size = (uint32_t)buf[0] << 24 | (uint32_t)buf[1] << 16 |
-		       (uint32_t)buf[2] << 8 | (uint32_t)buf[3];
-		size = recv(fd, buf, size, MSG_WAITALL);
-		if (size <= 0)
+		frame_size = (uint32_t)buf[0] << 24 | (uint32_t)buf[1] << 16 |
+			     (uint32_t)buf[2] << 8 | (uint32_t)buf[3];
+		if (frame_size > sizeof(buf)) {
+			if (verbose)
+				dbg("data length too big: %u", frame_size);
+			send_data(fd, "%i%s%i%s", 0, "log", LOG_ERR,
+				  "data length too big");
+			break;
+		}
+
+		size = recv(fd, buf, frame_size, MSG_WAITALL);
+		if (size <= 0 || (uint32_t)size != frame_size)
 			break;
 
-		ret = scan_data(buf, size, "%i%s",  &seq, cmd);
+		ret = scan_data(buf, size, "%i%s",  &seq, cmd, sizeof(cmd));
 		if (ret < 0) {
 			if (verbose)
 				dbg("message too short: %ld", size);
