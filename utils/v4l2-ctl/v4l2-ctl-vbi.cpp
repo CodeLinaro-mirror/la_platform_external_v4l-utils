@@ -183,106 +183,94 @@ static void fill_raw_vbi(v4l2_vbi_format &dst, const v4l2_vbi_format &src)
 		dst.count[1] = src.count[1];
 }
 
-void vbi_set(cv4l_fd &_fd)
+static void __vbi_set_sliced(cv4l_fd &_fd, bool set, bool _try, __u32 type,
+			     v4l2_format &sliced)
 {
 	int fd = _fd.g_fd();
 	int ret;
 
-	if (options[OptSetSlicedVbiFormat] || options[OptTrySlicedVbiFormat]) {
-		sliced_fmt.type = V4L2_BUF_TYPE_SLICED_VBI_CAPTURE;
-		if (options[OptSetSlicedVbiFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &sliced_fmt);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &sliced_fmt);
-		if (ret == 0 && (verbose || options[OptTrySlicedVbiFormat]))
-			printfmt(fd, sliced_fmt);
-	}
+	if (!set && !_try)
+		return;
 
-	if (options[OptSetSlicedVbiOutFormat] || options[OptTrySlicedVbiOutFormat]) {
-		sliced_fmt_out.type = V4L2_BUF_TYPE_SLICED_VBI_OUTPUT;
-		if (options[OptSetSlicedVbiOutFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &sliced_fmt_out);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &sliced_fmt_out);
-		if (ret == 0 && (verbose || options[OptTrySlicedVbiOutFormat]))
-			printfmt(fd, sliced_fmt_out);
-	}
+	sliced.type = type;
+	if (set)
+		ret = doioctl(fd, VIDIOC_S_FMT, &sliced);
+	else
+		ret = doioctl(fd, VIDIOC_TRY_FMT, &sliced);
+	if (ret == 0 && (verbose || _try))
+		printfmt(fd, sliced);
+}
 
-	if (options[OptSetVbiFormat] || options[OptTryVbiFormat]) {
-		v4l2_format fmt;
+static void __vbi_set_raw(cv4l_fd &_fd, bool set, bool _try, __u32 type,
+			  const v4l2_format &raw)
+{
+	int fd = _fd.g_fd();
+	v4l2_format fmt;
+	int ret;
 
-		fmt.type = V4L2_BUF_TYPE_VBI_CAPTURE;
-		doioctl(fd, VIDIOC_G_FMT, &fmt);
-		fill_raw_vbi(fmt.fmt.vbi, raw_fmt.fmt.vbi);
-		if (options[OptSetVbiFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &fmt);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &fmt);
-		if (ret == 0 && (verbose || options[OptTryVbiFormat]))
-			printfmt(fd, fmt);
-	}
+	if (!set && !_try)
+		return;
 
-	if (options[OptSetVbiOutFormat] || options[OptTryVbiOutFormat]) {
-		v4l2_format fmt;
+	fmt.type = type;
+	doioctl(fd, VIDIOC_G_FMT, &fmt);
+	fill_raw_vbi(fmt.fmt.vbi, raw.fmt.vbi);
+	if (set)
+		ret = doioctl(fd, VIDIOC_S_FMT, &fmt);
+	else
+		ret = doioctl(fd, VIDIOC_TRY_FMT, &fmt);
+	if (ret == 0 && (verbose || _try))
+		printfmt(fd, fmt);
+}
 
-		fmt.type = V4L2_BUF_TYPE_VBI_OUTPUT;
-		doioctl(fd, VIDIOC_G_FMT, &fmt);
-		fill_raw_vbi(fmt.fmt.vbi, raw_fmt_out.fmt.vbi);
-		if (options[OptSetVbiOutFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &fmt);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &fmt);
-		if (ret == 0 && (verbose || options[OptTryVbiOutFormat]))
-			printfmt(fd, fmt);
-	}
+void vbi_set(cv4l_fd &_fd)
+{
+	__vbi_set_sliced(_fd, options[OptSetSlicedVbiFormat],
+			 options[OptTrySlicedVbiFormat],
+			 V4L2_BUF_TYPE_SLICED_VBI_CAPTURE, sliced_fmt);
+	__vbi_set_sliced(_fd, options[OptSetSlicedVbiOutFormat],
+			 options[OptTrySlicedVbiOutFormat],
+			 V4L2_BUF_TYPE_SLICED_VBI_OUTPUT, sliced_fmt_out);
+	__vbi_set_raw(_fd, options[OptSetVbiFormat], options[OptTryVbiFormat],
+		      V4L2_BUF_TYPE_VBI_CAPTURE, raw_fmt);
+	__vbi_set_raw(_fd, options[OptSetVbiOutFormat],
+		      options[OptTryVbiOutFormat],
+		      V4L2_BUF_TYPE_VBI_OUTPUT, raw_fmt_out);
+}
+
+static void __vbi_get(cv4l_fd &_fd, __u32 type, v4l2_format &fmt)
+{
+	int fd = _fd.g_fd();
+
+	fmt.type = type;
+	if (doioctl(fd, VIDIOC_G_FMT, &fmt) == 0)
+		printfmt(fd, fmt);
 }
 
 void vbi_get(cv4l_fd &_fd)
 {
-	int fd = _fd.g_fd();
+	if (options[OptGetSlicedVbiFormat])
+		__vbi_get(_fd, V4L2_BUF_TYPE_SLICED_VBI_CAPTURE, sliced_fmt);
+	if (options[OptGetSlicedVbiOutFormat])
+		__vbi_get(_fd, V4L2_BUF_TYPE_SLICED_VBI_OUTPUT, sliced_fmt_out);
+	if (options[OptGetVbiFormat])
+		__vbi_get(_fd, V4L2_BUF_TYPE_VBI_CAPTURE, raw_fmt);
+	if (options[OptGetVbiOutFormat])
+		__vbi_get(_fd, V4L2_BUF_TYPE_VBI_OUTPUT, raw_fmt_out);
+}
 
-	if (options[OptGetSlicedVbiFormat]) {
-		sliced_fmt.type = V4L2_BUF_TYPE_SLICED_VBI_CAPTURE;
-		if (doioctl(fd, VIDIOC_G_FMT, &sliced_fmt) == 0)
-			printfmt(fd, sliced_fmt);
-	}
+static void __vbi_list(cv4l_fd &fd, __u32 type)
+{
+	struct v4l2_sliced_vbi_cap cap;
 
-	if (options[OptGetSlicedVbiOutFormat]) {
-		sliced_fmt_out.type = V4L2_BUF_TYPE_SLICED_VBI_OUTPUT;
-		if (doioctl(fd, VIDIOC_G_FMT, &sliced_fmt_out) == 0)
-			printfmt(fd, sliced_fmt_out);
-	}
-
-	if (options[OptGetVbiFormat]) {
-		raw_fmt.type = V4L2_BUF_TYPE_VBI_CAPTURE;
-		if (doioctl(fd, VIDIOC_G_FMT, &raw_fmt) == 0)
-			printfmt(fd, raw_fmt);
-	}
-
-	if (options[OptGetVbiOutFormat]) {
-		raw_fmt_out.type = V4L2_BUF_TYPE_VBI_OUTPUT;
-		if (doioctl(fd, VIDIOC_G_FMT, &raw_fmt_out) == 0)
-			printfmt(fd, raw_fmt_out);
-	}
+	cap.type = type;
+	if (doioctl(fd.g_fd(), VIDIOC_G_SLICED_VBI_CAP, &cap) == 0)
+		print_sliced_vbi_cap(cap);
 }
 
 void vbi_list(cv4l_fd &fd)
 {
-	if (options[OptGetSlicedVbiCap]) {
-		struct v4l2_sliced_vbi_cap cap;
-
-		cap.type = V4L2_BUF_TYPE_SLICED_VBI_CAPTURE;
-		if (doioctl(fd.g_fd(), VIDIOC_G_SLICED_VBI_CAP, &cap) == 0) {
-			print_sliced_vbi_cap(cap);
-		}
-	}
-
-	if (options[OptGetSlicedVbiOutCap]) {
-		struct v4l2_sliced_vbi_cap cap;
-
-		cap.type = V4L2_BUF_TYPE_SLICED_VBI_OUTPUT;
-		if (doioctl(fd.g_fd(), VIDIOC_G_SLICED_VBI_CAP, &cap) == 0) {
-			print_sliced_vbi_cap(cap);
-		}
-	}
+	if (options[OptGetSlicedVbiCap])
+		__vbi_list(fd, V4L2_BUF_TYPE_SLICED_VBI_CAPTURE);
+	if (options[OptGetSlicedVbiOutCap])
+		__vbi_list(fd, V4L2_BUF_TYPE_SLICED_VBI_OUTPUT);
 }
