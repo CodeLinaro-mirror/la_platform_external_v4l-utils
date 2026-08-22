@@ -47,75 +47,59 @@ void sdr_cmd(int ch, char *optarg)
 	}
 }
 
-void sdr_set(cv4l_fd &_fd)
+static void __sdr_set(cv4l_fd &_fd, bool set, bool _try, __u32 type)
 {
+	struct v4l2_format in_vfmt;
 	int fd = _fd.g_fd();
 	int ret;
 
-	if (options[OptSetSdrFormat] || options[OptTrySdrFormat]) {
-		struct v4l2_format in_vfmt;
+	if (!set && !_try)
+		return;
 
-		in_vfmt.type = V4L2_BUF_TYPE_SDR_CAPTURE;
-		in_vfmt.fmt.sdr.pixelformat = vfmt.fmt.sdr.pixelformat;
+	in_vfmt.type = type;
+	in_vfmt.fmt.sdr.pixelformat = vfmt.fmt.sdr.pixelformat;
 
-		if (in_vfmt.fmt.sdr.pixelformat < 256) {
-			struct v4l2_fmtdesc fmt = {};
+	if (in_vfmt.fmt.sdr.pixelformat < 256) {
+		struct v4l2_fmtdesc fmt = {};
 
-			fmt.index = in_vfmt.fmt.sdr.pixelformat;
-			fmt.type = V4L2_BUF_TYPE_SDR_CAPTURE;
+		fmt.index = in_vfmt.fmt.sdr.pixelformat;
+		fmt.type = in_vfmt.type;
 
-			if (doioctl(fd, VIDIOC_ENUM_FMT, &fmt))
-				fmt.pixelformat = 0;
+		if (doioctl(fd, VIDIOC_ENUM_FMT, &fmt))
+			fmt.pixelformat = 0;
 
-			in_vfmt.fmt.sdr.pixelformat = fmt.pixelformat;
-		}
-
-		if (options[OptSetSdrFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &in_vfmt);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &in_vfmt);
-		if (ret == 0 && (verbose || options[OptTrySdrFormat]))
-			printfmt(fd, in_vfmt);
+		in_vfmt.fmt.sdr.pixelformat = fmt.pixelformat;
 	}
-	if (options[OptSetSdrOutFormat] || options[OptTrySdrOutFormat]) {
-		struct v4l2_format in_vfmt;
 
-		in_vfmt.type = V4L2_BUF_TYPE_SDR_OUTPUT;
-		in_vfmt.fmt.sdr.pixelformat = vfmt.fmt.sdr.pixelformat;
+	if (set)
+		ret = doioctl(fd, VIDIOC_S_FMT, &in_vfmt);
+	else
+		ret = doioctl(fd, VIDIOC_TRY_FMT, &in_vfmt);
+	if (ret == 0 && (verbose || _try))
+		printfmt(fd, in_vfmt);
+}
 
-		if (in_vfmt.fmt.sdr.pixelformat < 256) {
-			struct v4l2_fmtdesc fmt = {};
+void sdr_set(cv4l_fd &_fd)
+{
+	__sdr_set(_fd, options[OptSetSdrFormat], options[OptTrySdrFormat],
+		  V4L2_BUF_TYPE_SDR_CAPTURE);
+	__sdr_set(_fd, options[OptSetSdrOutFormat],
+		  options[OptTrySdrOutFormat], V4L2_BUF_TYPE_SDR_OUTPUT);
+}
 
-			fmt.index = in_vfmt.fmt.sdr.pixelformat;
-			fmt.type = V4L2_BUF_TYPE_SDR_OUTPUT;
-
-			if (doioctl(fd, VIDIOC_ENUM_FMT, &fmt))
-				fmt.pixelformat = 0;
-
-			in_vfmt.fmt.sdr.pixelformat = fmt.pixelformat;
-		}
-
-		if (options[OptSetSdrOutFormat])
-			ret = doioctl(fd, VIDIOC_S_FMT, &in_vfmt);
-		else
-			ret = doioctl(fd, VIDIOC_TRY_FMT, &in_vfmt);
-		if (ret == 0 && (verbose || options[OptTrySdrOutFormat]))
-			printfmt(fd, in_vfmt);
-	}
+static void __sdr_get(cv4l_fd &fd, __u32 type)
+{
+	vfmt.type = type;
+	if (doioctl(fd.g_fd(), VIDIOC_G_FMT, &vfmt) == 0)
+		printfmt(fd.g_fd(), vfmt);
 }
 
 void sdr_get(cv4l_fd &fd)
 {
-	if (options[OptGetSdrFormat]) {
-		vfmt.type = V4L2_BUF_TYPE_SDR_CAPTURE;
-		if (doioctl(fd.g_fd(), VIDIOC_G_FMT, &vfmt) == 0)
-			printfmt(fd.g_fd(), vfmt);
-	}
-	if (options[OptGetSdrOutFormat]) {
-		vfmt.type = V4L2_BUF_TYPE_SDR_OUTPUT;
-		if (doioctl(fd.g_fd(), VIDIOC_G_FMT, &vfmt) == 0)
-			printfmt(fd.g_fd(), vfmt);
-	}
+	if (options[OptGetSdrFormat])
+		__sdr_get(fd, V4L2_BUF_TYPE_SDR_CAPTURE);
+	if (options[OptGetSdrOutFormat])
+		__sdr_get(fd, V4L2_BUF_TYPE_SDR_OUTPUT);
 }
 
 void sdr_list(cv4l_fd &fd)
