@@ -227,7 +227,7 @@ void vbi_set(cv4l_fd &_fd)
 
 		fmt.type = V4L2_BUF_TYPE_VBI_OUTPUT;
 		doioctl(fd, VIDIOC_G_FMT, &fmt);
-		fill_raw_vbi(fmt.fmt.vbi, raw_fmt.fmt.vbi);
+		fill_raw_vbi(fmt.fmt.vbi, raw_fmt_out.fmt.vbi);
 		if (options[OptSetVbiOutFormat])
 			ret = doioctl(fd, VIDIOC_S_FMT, &fmt);
 		else
