@@ -205,14 +205,15 @@ static void __vbi_set_raw(cv4l_fd &_fd, bool set, bool _try, __u32 type,
 			  const v4l2_format &raw)
 {
 	int fd = _fd.g_fd();
-	v4l2_format fmt;
+	v4l2_format fmt = {};
 	int ret;
 
 	if (!set && !_try)
 		return;
 
 	fmt.type = type;
-	doioctl(fd, VIDIOC_G_FMT, &fmt);
+	if (doioctl(fd, VIDIOC_G_FMT, &fmt))
+		return;
 	fill_raw_vbi(fmt.fmt.vbi, raw.fmt.vbi);
 	if (set)
 		ret = doioctl(fd, VIDIOC_S_FMT, &fmt);
