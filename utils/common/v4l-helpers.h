@@ -1486,7 +1486,7 @@ static inline int v4l_queue_alloc_bufs_info(struct v4l_queue *q)
 		return 0;
 	bi = (struct v4l_queue_buf_info *)calloc(q->max_num_buffers, sizeof(*bi));
 	if (!bi)
-		return -ENOMEM;
+		return ENOMEM;
 	for (i = 0; i < VIDEO_MAX_FRAME; i++)
 		bi[i] = q->bufs_info[i];
 	for (i = VIDEO_MAX_FRAME; i < q->max_num_buffers; i++)
@@ -1889,7 +1889,7 @@ static inline int v4l_query_ext_ctrl(v4l_fd *f, struct v4l2_query_ext_ctrl *qec,
 
 	if (next_compound && !f->have_query_ext_ctrl) {
 		if (!next_ctrl)
-			return -EINVAL;
+			return EINVAL;
 		next_compound = false;
 	}
 	if (next_compound)
