@@ -281,11 +281,6 @@ private:
 	bool has_compose() { return m_fd->has_compose(); }
 	bool cur_io_has_crop() { return m_fd->cur_io_has_crop(); }
 	bool cur_io_has_compose() { return m_fd->cur_io_has_compose(); }
-	bool ioctl_exists(int ret)
-	{
-		return ret == 0 || errno != ENOTTY;
-	}
-
 
 	cv4l_fd *m_fd;
 	int m_row;

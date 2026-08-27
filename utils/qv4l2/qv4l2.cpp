@@ -593,7 +593,7 @@ void ApplicationWindow::ctrlEvent()
 		free(c.string);
 	}
 
-	if (event_ret && errno == ENODEV) {
+	if (event_ret == ENODEV) {
 		closeDevice();
 		if (m_capture) {
 			m_capture->stop();
@@ -754,6 +754,7 @@ void ApplicationWindow::capVbiFrame()
 	cv4l_buffer buf(m_queue);
 	__u8 *data = NULL;
 	int s = 0;
+	int err = 0;
 
 	if (m_singleStep)
 		m_capNotifier->setEnabled(false);
@@ -773,8 +774,9 @@ void ApplicationWindow::capVbiFrame()
 
 	case methodMmap:
 	case methodUser:
-		if (dqbuf(buf)) {
-			if (errno == EAGAIN)
+		err = dqbuf(buf);
+		if (err) {
+			if (err == EAGAIN)
 				return;
 			error("dqbuf");
 			m_capStartAct->setChecked(false);
@@ -852,6 +854,7 @@ void ApplicationWindow::capSdrFrame()
 	cv4l_buffer buf(m_queue);
 	__u8 *data = NULL;
 	int s = 0;
+	int err = 0;
 
 	if (m_singleStep)
 		m_capNotifier->setEnabled(false);
@@ -871,8 +874,9 @@ void ApplicationWindow::capSdrFrame()
 
 	case methodMmap:
 	case methodUser:
-		if (dqbuf(buf)) {
-			if (errno == EAGAIN)
+		err = dqbuf(buf);
+		if (err) {
+			if (err == EAGAIN)
 				return;
 			error("dqbuf");
 			m_capStartAct->setChecked(false);
@@ -954,6 +958,7 @@ void ApplicationWindow::outFrame()
 {
 	cv4l_buffer buf(m_queue);
 	int s = 0;
+	int err = 0;
 
 	switch (m_capMethod) {
 	case methodRead:
@@ -972,8 +977,9 @@ void ApplicationWindow::outFrame()
 
 	case methodMmap:
 	case methodUser:
-		if (dqbuf(buf)) {
-			if (errno == EAGAIN)
+		err = dqbuf(buf);
+		if (err) {
+			if (err == EAGAIN)
 				return;
 			error("dqbuf");
 			m_capStartAct->setChecked(false);
@@ -1066,8 +1072,9 @@ void ApplicationWindow::capFrame()
 
 	case methodMmap:
 	case methodUser:
-		if (dqbuf(buf)) {
-			if (errno == EAGAIN)
+		err = dqbuf(buf);
+		if (err) {
+			if (err == EAGAIN)
 				return;
 			error("dqbuf");
 			m_capStartAct->setChecked(false);

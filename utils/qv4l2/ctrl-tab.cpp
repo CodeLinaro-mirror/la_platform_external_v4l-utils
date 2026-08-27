@@ -432,12 +432,14 @@ void ApplicationWindow::ctrlAction(int id)
 	ctrls.count = idx;
 	ctrls.which = which;
 	ctrls.controls = c;
-	if (s_ext_ctrls(ctrls)) {
+	int err = s_ext_ctrls(ctrls);
+
+	if (err) {
 		if (ctrls.error_idx >= ctrls.count) {
-			error(errno);
+			error(err);
 		}
 		else {
-			errorCtrl(c[ctrls.error_idx].id, errno);
+			errorCtrl(c[ctrls.error_idx].id, err);
 		}
 	}
 	for (unsigned i = 0; i < ctrls.count; i++) {
@@ -560,8 +562,10 @@ void ApplicationWindow::updateCtrl(unsigned id)
 	ctrls.count = 1;
 	ctrls.which = which;
 	ctrls.controls = &c;
-	if (s_ext_ctrls(ctrls)) {
-		errorCtrl(id, errno, c.value);
+	int err = s_ext_ctrls(ctrls);
+
+	if (err) {
+		errorCtrl(id, err, c.value);
 	}
 	else if (m_ctrlMap[id].flags & V4L2_CTRL_FLAG_UPDATE)
 		refresh(which);
@@ -672,12 +676,14 @@ void ApplicationWindow::refresh(unsigned which)
 	ctrls.count = cnt;
 	ctrls.which = which;
 	ctrls.controls = c;
-	if (g_ext_ctrls(ctrls)) {
+	int err = g_ext_ctrls(ctrls);
+
+	if (err) {
 		if (ctrls.error_idx >= ctrls.count) {
-			error(errno);
+			error(err);
 		}
 		else {
-			errorCtrl(c[ctrls.error_idx].id, errno);
+			errorCtrl(c[ctrls.error_idx].id, err);
 		}
 	}
 	else {
