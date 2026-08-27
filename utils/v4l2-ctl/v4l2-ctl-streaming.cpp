@@ -1358,10 +1358,11 @@ static int do_setup_out_buffers(cv4l_fd &fd, cv4l_queue &q, FILE *fin, bool qbuf
 			buf.s_request_fd(fwht_reqs[i].fd);
 			buf.or_flags(V4L2_BUF_FLAG_REQUEST_FD);
 
-			if (set_fwht_ext_ctrl(fd, &last_fwht_hdr, last_fwht_bf_ts,
-					      buf.g_request_fd())) {
+			int ret = set_fwht_ext_ctrl(fd, &last_fwht_hdr, last_fwht_bf_ts,
+						    buf.g_request_fd());
+			if (ret) {
 				fprintf(stderr, "%s: set_fwht_ext_ctrl failed on %dth buf: %s\n",
-					__func__, i, strerror(errno));
+					__func__, i, strerror(ret));
 				return QUEUE_ERROR;
 			}
 		}
@@ -1485,7 +1486,7 @@ static int do_handle_cap(cv4l_fd &fd, cv4l_queue &q, FILE *fout, int *index,
 		if (ret == EPIPE)
 			return QUEUE_STOPPED;
 		if (ret) {
-			fprintf(stderr, "%s: failed: %s\n", "VIDIOC_DQBUF", strerror(errno));
+			fprintf(stderr, "%s: failed: %s\n", "VIDIOC_DQBUF", strerror(ret));
 			return QUEUE_ERROR;
 		}
 		if (buf.g_flags() & V4L2_BUF_FLAG_LAST) {
@@ -1528,7 +1529,8 @@ static int do_handle_cap(cv4l_fd &fd, cv4l_queue &q, FILE *fout, int *index,
 		 * has the size that fits the old resolution and might not
 		 * fit to the new one.
 		 */
-		if (fd.qbuf(buf) && errno != EINVAL) {
+		ret = fd.qbuf(buf);
+		if (ret && ret != EINVAL) {
 			fprintf(stderr, "%s: qbuf error\n", __func__);
 			return QUEUE_ERROR;
 		}
@@ -1672,18 +1674,20 @@ static int do_handle_out(cv4l_fd &fd, cv4l_queue &q, FILE *fin, cv4l_buffer *cap
 			return QUEUE_ERROR;
 		}
 
-		if (set_fwht_ext_ctrl(fd, &last_fwht_hdr, last_fwht_bf_ts,
-				      buf.g_request_fd())) {
+		ret = set_fwht_ext_ctrl(fd, &last_fwht_hdr, last_fwht_bf_ts,
+					buf.g_request_fd());
+		if (ret) {
 			fprintf(stderr, "%s: set_fwht_ext_ctrl failed: %s\n",
-				__func__, strerror(errno));
+				__func__, strerror(ret));
 			return QUEUE_ERROR;
 		}
 	}
 
 	set_time_stamp(buf);
 
-	if (fd.qbuf(buf)) {
-		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_QBUF", strerror(errno));
+	ret = fd.qbuf(buf);
+	if (ret) {
+		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_QBUF", strerror(ret));
 		return QUEUE_ERROR;
 	}
 	if (fmt.g_pixelformat() == V4L2_PIX_FMT_FWHT_STATELESS) {
@@ -1741,7 +1745,7 @@ static int do_handle_out_to_in(cv4l_fd &out_fd, cv4l_fd &fd, cv4l_queue &out, cv
 		ret = out_fd.dqbuf(buf);
 	} while (ret == EAGAIN);
 	if (ret) {
-		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_DQBUF", strerror(errno));
+		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_DQBUF", strerror(ret));
 		return QUEUE_ERROR;
 	}
 	buf.init(in, buf.g_index());
@@ -1749,7 +1753,7 @@ static int do_handle_out_to_in(cv4l_fd &out_fd, cv4l_fd &fd, cv4l_queue &out, cv
 	if (ret == 0)
 		ret = fd.qbuf(buf);
 	if (ret) {
-		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_QBUF", strerror(errno));
+		fprintf(stderr, "%s: failed: %s\n", "VIDIOC_QBUF", strerror(ret));
 		return QUEUE_ERROR;
 	}
 	return 0;
