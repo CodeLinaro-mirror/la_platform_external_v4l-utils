@@ -13,6 +13,7 @@
 
 #include <cec-info.h>
 
+#include <cstdlib>
 #include <vector>
 
 #define TAG_AUDIO_RATE_CONTROL		1

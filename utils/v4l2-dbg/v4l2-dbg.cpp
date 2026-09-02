@@ -42,6 +42,7 @@
 #include "v4l2-dbg-ac97.h"
 #include "v4l2-dbg-tvp5150.h"
 #include "v4l2-dbg-micron.h"
+#include <cstdlib>
 
 struct board_list {
 	const char *name;

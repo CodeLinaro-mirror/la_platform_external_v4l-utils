@@ -28,6 +28,7 @@
 #include <v4l2-info.h>
 #include <libv4l2rds.h>
 #include <v4l-getsubopt.h>
+#include <cstdlib>
 
 using dev_vec = std::vector<std::string>;
 using dev_map = std::map<std::string, std::string>;

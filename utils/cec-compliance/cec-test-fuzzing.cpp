@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 
 #include "cec-compliance.h"
+#include <stdlib.h>
 
 int testFuzzing(struct node &node, unsigned me, unsigned la)
 {

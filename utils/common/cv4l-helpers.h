@@ -9,6 +9,7 @@
 #ifndef _CV4L_HELPERS_H_
 #define _CV4L_HELPERS_H_
 
+#include <cstdlib>
 #include <limits.h>
 #include <v4l-helpers.h>
 

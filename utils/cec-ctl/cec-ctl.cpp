@@ -27,6 +27,7 @@
 
 #include "cec-ctl.h"
 #include "compiler.h"
+#include <cstdlib>
 
 static struct timespec start_monotonic;
 static struct timeval start_timeofday;

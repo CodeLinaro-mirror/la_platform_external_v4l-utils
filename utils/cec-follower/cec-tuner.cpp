@@ -10,6 +10,7 @@
 
 #include "cec-follower.h"
 #include "compiler.h"
+#include <stdlib.h>
 
 #define NUM_ANALOG_FREQS 3
 #define NUM_DIGITAL_CHANS 3
