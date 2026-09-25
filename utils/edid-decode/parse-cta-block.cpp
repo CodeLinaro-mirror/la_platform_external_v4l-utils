@@ -1711,8 +1711,8 @@ static void cta_amd(const unsigned char *x, unsigned length)
     if (supported_cs & CS_BT2020)
         printf("      BT.2020 Gamut Supported\n");
 
-    bool is_mini_led = x[5] >> 5 == 1;
-    bool is_oled     = x[5] >> 5 == 2;
+    bool is_mini_led = x[5] >> 6 == 1;
+    bool is_oled     = x[5] >> 6 == 2;
     if (is_mini_led)
         printf("      Display is Mini LED\n");
     if (is_oled)
