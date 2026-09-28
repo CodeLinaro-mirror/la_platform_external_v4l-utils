@@ -98,7 +98,6 @@ int main(int argc, char **argv)
 	memset(&vbiresult, 0, sizeof(vbiresult));
 	for (i = 0; i < 16; i++) {
 		int l;
-		int set = 0;
 
 		memset(&vbifmt, 0, sizeof(vbifmt));
 		vbifmt.type = V4L2_BUF_TYPE_SLICED_VBI_CAPTURE;
@@ -113,10 +112,6 @@ int main(int argc, char **argv)
 			exit(-1);
 		}
 		vbiresult.io_size = vbifmt.fmt.sliced.io_size;
-		for (l = 0; l < 24; l++) {
-			set |= vbifmt.fmt.sliced.service_lines[0][l] |
-			       vbifmt.fmt.sliced.service_lines[1][l];
-		}
 		detect(fh, &vbiresult);
 	}
 	close(fh);
