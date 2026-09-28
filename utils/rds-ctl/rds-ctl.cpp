@@ -449,10 +449,8 @@ static void print_rds_af(const struct v4l2_rds_af_set *af_set)
 
 static void print_rds_eon(const struct v4l2_rds_eon_set *eon_set)
 {
-	int counter = 0;
-
 	printf("\n\nEnhanced Other Network information: %u channels", eon_set->size);
-	for (int i = 0; i < eon_set->size; i++, counter++) {
+	for (int i = 0; i < eon_set->size; i++) {
 		if (eon_set->eon[i].valid_fields & V4L2_RDS_PI)
 			printf("\nPI(ON %02i) =  %04x", i, eon_set->eon[i].pi);
 		if (eon_set->eon[i].valid_fields & V4L2_RDS_PS)
