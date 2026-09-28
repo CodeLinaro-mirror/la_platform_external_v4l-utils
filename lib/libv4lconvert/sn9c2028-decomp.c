@@ -57,7 +57,7 @@
  * are NOT set to zero!
  */
 
-#define EAT_BITS(num) { bitBufCount -= num; bits_eaten += num; }
+#define EAT_BITS(num) { bitBufCount -= num; }
 
 /*
  * EAT_BITS consumes <num> bits (PEEK_BITS does not consume anything,
@@ -131,7 +131,6 @@ void v4lconvert_decode_sn9c2028(const unsigned char *src, unsigned char *dst,
 	int x, y;
 	unsigned long bitBuf = 0;
 	unsigned long bitBufCount = 0;
-	unsigned long bits_eaten = 0;
 
 	src += 12;    /* Remove the header */
 
