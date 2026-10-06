@@ -38,8 +38,7 @@ void sdr_cmd(int ch, char *optarg)
 			sdr_usage();
 			std::exit(EXIT_FAILURE);
 		} else if (strlen(optarg) == 4) {
-			vfmt.fmt.sdr.pixelformat = v4l2_fourcc(optarg[0],
-					optarg[1], optarg[2], optarg[3]);
+			vfmt.fmt.sdr.pixelformat = parse_pixelformat(optarg);
 		} else {
 			vfmt.fmt.sdr.pixelformat = strtoul(optarg, nullptr, 0);
 		}

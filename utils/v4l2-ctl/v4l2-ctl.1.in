@@ -155,6 +155,12 @@ Only set the result code, do not print any messages.
 .TP
 \fB--sleep\fR \fI<secs>\fR
 Sleep \fI<secs>\fR, call QUERYCAP and close the file handle.
+.SH VIDEO FORMATS
+Video pixel formats accept a four-character FOURCC, a FOURCC followed by
+\fB-BE\fR for a big-endian format, or a numeric value. For set/try video
+formats, numeric values below 256 select an index from the enumerated formats.
+The \fBbytesperline\fR and \fBsizeimage\fR suboptions may each be repeated once
+per plane, up to eight values (VIDEO_MAX_PLANES).
 .SH EXIT STATUS
 On success, it returns 0. Otherwise, it will return the error code.
 .SH EXAMPLES

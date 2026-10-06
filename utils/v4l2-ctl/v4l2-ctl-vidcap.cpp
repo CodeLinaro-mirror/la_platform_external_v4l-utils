@@ -1,16 +1,10 @@
-#include <cctype>
-
 #include <endian.h>
 
 #include "v4l2-ctl.h"
 
 static struct v4l2_frmsizeenum frmsize; /* list frame sizes */
 static struct v4l2_frmivalenum frmival; /* list frame intervals */
-static unsigned set_fmts;
-static __u32 width, height, pixfmt, field, flags;
-static __u32 ycbcr, quantization, xfer_func, colorspace;
-static __u32 bytesperline[VIDEO_MAX_PLANES];
-static __u32 sizeimage[VIDEO_MAX_PLANES];
+static video_format_request format_request;
 static unsigned mbus_code;
 static bool enum_all;
 
@@ -104,15 +98,11 @@ static void print_video_fields(int fd)
 void vidcap_cmd(int ch, char *optarg)
 {
 	char *value, *subs;
-	bool be_pixfmt;
 
 	switch (ch) {
 	case OptSetVideoFormat:
 	case OptTryVideoFormat:
-		set_fmts = parse_fmt(optarg, width, height, pixfmt, field, colorspace,
-				xfer_func, ycbcr, quantization, flags, bytesperline,
-				sizeimage);
-		if (!set_fmts) {
+		if (!parse_fmt(optarg, format_request)) {
 			vidcap_usage();
 			std::exit(EXIT_FAILURE);
 		}
@@ -127,18 +117,7 @@ void vidcap_cmd(int ch, char *optarg)
 		}
 		break;
 	case OptListFrameSizes:
-		be_pixfmt = strlen(optarg) == 7 && !memcmp(optarg + 4, "-BE", 3);
-		if (be_pixfmt || strlen(optarg) == 4) {
-			frmsize.pixel_format = v4l2_fourcc(optarg[0], optarg[1],
-							   optarg[2], optarg[3]);
-			if (be_pixfmt)
-				frmsize.pixel_format |= 1U << 31;
-		} else if (isdigit(optarg[0])) {
-			frmsize.pixel_format = strtoul(optarg, nullptr, 0);
-		} else {
-			fprintf(stderr, "The pixelformat '%s' is invalid\n", optarg);
-			std::exit(EXIT_FAILURE);
-		}
+		frmsize.pixel_format = parse_pixelformat(optarg);
 		break;
 	case OptListFrameIntervals:
 		subs = optarg;
@@ -158,19 +137,7 @@ void vidcap_cmd(int ch, char *optarg)
 				frmival.height = strtoul(value, nullptr, 0);
 				break;
 			case 2:
-				be_pixfmt = strlen(value) == 7 && !memcmp(value + 4, "-BE", 3);
-				if (be_pixfmt || strlen(value) == 4) {
-					frmival.pixel_format =
-						v4l2_fourcc(value[0], value[1],
-							    value[2], value[3]);
-					if (be_pixfmt)
-						frmival.pixel_format |= 1U << 31;
-				} else if (isdigit(optarg[0])) {
-					frmival.pixel_format = strtoul(value, nullptr, 0);
-				} else {
-					fprintf(stderr, "The pixelformat '%s' is invalid\n", optarg);
-					std::exit(EXIT_FAILURE);
-				}
+				frmival.pixel_format = parse_pixelformat(value);
 				break;
 			default:
 				vidcap_usage();
@@ -183,127 +150,8 @@ void vidcap_cmd(int ch, char *optarg)
 
 int vidcap_get_and_update_fmt(cv4l_fd &_fd, struct v4l2_format &vfmt)
 {
-	int fd = _fd.g_fd();
-	int ret;
-
-	memset(&vfmt, 0, sizeof(vfmt));
-	vfmt.fmt.pix.priv = priv_magic;
-	vfmt.type = vidcap_buftype;
-
-	ret = doioctl(fd, VIDIOC_G_FMT, &vfmt);
-	if (ret)
-		return ret;
-
-	if (is_multiplanar) {
-		if (set_fmts & FmtWidth)
-			vfmt.fmt.pix_mp.width = width;
-		if (set_fmts & FmtHeight)
-			vfmt.fmt.pix_mp.height = height;
-		if (set_fmts & FmtPixelFormat) {
-			vfmt.fmt.pix_mp.pixelformat = pixfmt;
-			if (vfmt.fmt.pix_mp.pixelformat < 256) {
-				vfmt.fmt.pix_mp.pixelformat = pixfmt =
-					find_pixel_format(fd, vfmt.fmt.pix_mp.pixelformat,
-							  false, true);
-			}
-		}
-		if (set_fmts & FmtField)
-			vfmt.fmt.pix_mp.field = field;
-		if (set_fmts & FmtFlags)
-			vfmt.fmt.pix_mp.flags = flags;
-		if (set_fmts & FmtBytesPerLine) {
-			for (unsigned i = 0; i < VIDEO_MAX_PLANES; i++)
-				vfmt.fmt.pix_mp.plane_fmt[i].bytesperline =
-					bytesperline[i];
-		} else {
-			/*
-			 * G_FMT might return bytesperline values > width,
-			 * reset them to 0 to force the driver to update them
-			 * to the closest value for the new width.
-			 */
-			for (unsigned i = 0; i < vfmt.fmt.pix_mp.num_planes; i++)
-				vfmt.fmt.pix_mp.plane_fmt[i].bytesperline = 0;
-		}
-		if (set_fmts & FmtSizeImage) {
-			for (unsigned i = 0; i < VIDEO_MAX_PLANES; i++)
-				vfmt.fmt.pix_mp.plane_fmt[i].sizeimage =
-					sizeimage[i];
-		}
-
-		if (set_fmts & FmtColorspace) {
-			vfmt.fmt.pix_mp.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix_mp.colorspace = colorspace;
-		}
-		if (set_fmts & FmtYCbCr) {
-			vfmt.fmt.pix_mp.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix_mp.ycbcr_enc = ycbcr;
-		}
-		if (set_fmts & FmtQuantization) {
-			vfmt.fmt.pix_mp.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix_mp.quantization = quantization;
-		}
-		if (set_fmts & FmtXferFunc) {
-			vfmt.fmt.pix_mp.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix_mp.xfer_func = xfer_func;
-		}
-	} else {
-		if (set_fmts & FmtWidth)
-			vfmt.fmt.pix.width = width;
-		if (set_fmts & FmtHeight)
-			vfmt.fmt.pix.height = height;
-		if (set_fmts & FmtPixelFormat) {
-			vfmt.fmt.pix.pixelformat = pixfmt;
-			if (vfmt.fmt.pix.pixelformat < 256) {
-				vfmt.fmt.pix.pixelformat = pixfmt =
-					find_pixel_format(fd, vfmt.fmt.pix.pixelformat,
-							  false, false);
-			}
-		}
-		if (set_fmts & FmtField)
-			vfmt.fmt.pix.field = field;
-		if (set_fmts & FmtFlags)
-			vfmt.fmt.pix.flags = flags;
-		if (set_fmts & FmtBytesPerLine) {
-			vfmt.fmt.pix.bytesperline = bytesperline[0];
-		} else {
-			/*
-			 * G_FMT might return a bytesperline value > width,
-			 * reset this to 0 to force the driver to update it
-			 * to the closest value for the new width.
-			 */
-			vfmt.fmt.pix.bytesperline = 0;
-		}
-		if (set_fmts & FmtSizeImage)
-			vfmt.fmt.pix.sizeimage = sizeimage[0];
-		if (set_fmts & FmtColorspace) {
-			vfmt.fmt.pix.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix.colorspace = colorspace;
-		}
-		if (set_fmts & FmtYCbCr) {
-			vfmt.fmt.pix.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix.ycbcr_enc = ycbcr;
-		}
-		if (set_fmts & FmtQuantization) {
-			vfmt.fmt.pix.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix.quantization = quantization;
-		}
-		if (set_fmts & FmtXferFunc) {
-			vfmt.fmt.pix.flags |= V4L2_PIX_FMT_FLAG_SET_CSC;
-			vfmt.fmt.pix.xfer_func = xfer_func;
-		}
-
-	}
-
-	if ((set_fmts & FmtPixelFormat) &&
-	    !valid_pixel_format(fd, pixfmt, false, is_multiplanar)) {
-		if (pixfmt)
-			fprintf(stderr, "The pixelformat '%s' is invalid\n",
-				fcc2s(pixfmt).c_str());
-		else
-			fprintf(stderr, "The pixelformat index was invalid\n");
-		return -EINVAL;
-	}
-	return 0;
+	return video_get_and_update_fmt(_fd, vfmt, vidcap_buftype,
+				       priv_magic, format_request);
 }
 
 void vidcap_set(cv4l_fd &_fd)

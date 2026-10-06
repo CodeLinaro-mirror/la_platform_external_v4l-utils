@@ -5,6 +5,7 @@ v4l2_ctl_sources = files(
     'v4l-stream.c',
     'v4l2-ctl-common.cpp',
     'v4l2-ctl-edid.cpp',
+    'v4l2-ctl-format.cpp',
     'v4l2-ctl-io.cpp',
     'v4l2-ctl-meta.cpp',
     'v4l2-ctl-misc.cpp',

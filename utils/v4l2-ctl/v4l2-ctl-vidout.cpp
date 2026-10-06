@@ -1,9 +1,6 @@
 #include "v4l2-ctl.h"
 
-static unsigned set_fmts_out;
-static __u32 width, height, pixfmt, field, colorspace, xfer_func, ycbcr, quantization, flags;
-static __u32 bytesperline[VIDEO_MAX_PLANES];
-static __u32 sizeimage[VIDEO_MAX_PLANES];
+static video_format_request format_request;
 static unsigned mbus_code_out;
 static bool enum_all;
 
@@ -90,11 +87,8 @@ void vidout_cmd(int ch, char *optarg)
 	switch (ch) {
 	case OptSetVideoOutFormat:
 	case OptTryVideoOutFormat:
-		set_fmts_out = parse_fmt(optarg, width, height, pixfmt, field,
-				colorspace, xfer_func, ycbcr, quantization, flags, bytesperline,
-				sizeimage);
-		if (!set_fmts_out) {
-			vidcap_usage();
+		if (!parse_fmt(optarg, format_request)) {
+			vidout_usage();
 			std::exit(EXIT_FAILURE);
 		}
 		break;
@@ -118,98 +112,11 @@ void vidout_set(cv4l_fd &_fd)
 	if (options[OptSetVideoOutFormat] || options[OptTryVideoOutFormat]) {
 		struct v4l2_format vfmt;
 
-		memset(&vfmt, 0, sizeof(vfmt));
-		vfmt.fmt.pix.priv = priv_magic;
-		vfmt.type = vidout_buftype;
-		if (doioctl(fd, VIDIOC_G_FMT, &vfmt) == 0) {
-			if (is_multiplanar) {
-				if (set_fmts_out & FmtWidth)
-					vfmt.fmt.pix_mp.width = width;
-				if (set_fmts_out & FmtHeight)
-					vfmt.fmt.pix_mp.height = height;
-				if (set_fmts_out & FmtPixelFormat) {
-					vfmt.fmt.pix_mp.pixelformat = pixfmt;
-					if (vfmt.fmt.pix_mp.pixelformat < 256) {
-						vfmt.fmt.pix_mp.pixelformat = pixfmt =
-							find_pixel_format(fd, vfmt.fmt.pix_mp.pixelformat,
-									true, true);
-					}
-				}
-				if (set_fmts_out & FmtField)
-					vfmt.fmt.pix_mp.field = field;
-				if (set_fmts_out & FmtColorspace)
-					vfmt.fmt.pix_mp.colorspace = colorspace;
-				if (set_fmts_out & FmtXferFunc)
-					vfmt.fmt.pix_mp.xfer_func = xfer_func;
-				if (set_fmts_out & FmtYCbCr)
-					vfmt.fmt.pix_mp.ycbcr_enc = ycbcr;
-				if (set_fmts_out & FmtQuantization)
-					vfmt.fmt.pix_mp.quantization = quantization;
-				if (set_fmts_out & FmtFlags)
-					vfmt.fmt.pix_mp.flags = flags;
-				if (set_fmts_out & FmtBytesPerLine) {
-					for (unsigned i = 0; i < VIDEO_MAX_PLANES; i++)
-						vfmt.fmt.pix_mp.plane_fmt[i].bytesperline =
-							bytesperline[i];
-				} else {
-					/* G_FMT might return bytesperline values > width,
-					 * reset them to 0 to force the driver to update them
-					 * to the closest value for the new width. */
-					for (unsigned i = 0; i < vfmt.fmt.pix_mp.num_planes; i++)
-						vfmt.fmt.pix_mp.plane_fmt[i].bytesperline = 0;
-				}
-				if (set_fmts_out & FmtSizeImage) {
-					for (unsigned i = 0; i < VIDEO_MAX_PLANES; i++)
-						vfmt.fmt.pix_mp.plane_fmt[i].sizeimage =
-							sizeimage[i];
-				}
-			} else {
-				if (set_fmts_out & FmtWidth)
-					vfmt.fmt.pix.width = width;
-				if (set_fmts_out & FmtHeight)
-					vfmt.fmt.pix.height = height;
-				if (set_fmts_out & FmtPixelFormat) {
-					vfmt.fmt.pix.pixelformat = pixfmt;
-					if (vfmt.fmt.pix.pixelformat < 256) {
-						vfmt.fmt.pix.pixelformat = pixfmt =
-							find_pixel_format(fd, vfmt.fmt.pix.pixelformat,
-									true, false);
-					}
-				}
-				if (set_fmts_out & FmtField)
-					vfmt.fmt.pix.field = field;
-				if (set_fmts_out & FmtColorspace)
-					vfmt.fmt.pix.colorspace = colorspace;
-				if (set_fmts_out & FmtXferFunc)
-					vfmt.fmt.pix.xfer_func = xfer_func;
-				if (set_fmts_out & FmtYCbCr)
-					vfmt.fmt.pix.ycbcr_enc = ycbcr;
-				if (set_fmts_out & FmtQuantization)
-					vfmt.fmt.pix.quantization = quantization;
-				if (set_fmts_out & FmtFlags)
-					vfmt.fmt.pix.flags = flags;
-				if (set_fmts_out & FmtBytesPerLine) {
-					vfmt.fmt.pix.bytesperline = bytesperline[0];
-				} else {
-					/* G_FMT might return a bytesperline value > width,
-					 * reset this to 0 to force the driver to update it
-					 * to the closest value for the new width. */
-					vfmt.fmt.pix.bytesperline = 0;
-				}
-				if (set_fmts_out & FmtSizeImage)
-					vfmt.fmt.pix.sizeimage = sizeimage[0];
-			}
-
-			if ((set_fmts_out & FmtPixelFormat) &&
-			    !valid_pixel_format(fd, pixfmt, true, is_multiplanar)) {
-				if (pixfmt)
-					fprintf(stderr, "The pixelformat '%s' is invalid\n",
-						fcc2s(pixfmt).c_str());
-				else
-					fprintf(stderr, "The pixelformat index was invalid\n");
-				std::exit(EXIT_FAILURE);
-			}
-
+		ret = video_get_and_update_fmt(_fd, vfmt, vidout_buftype,
+					      priv_magic, format_request);
+		if (ret == -EINVAL)
+			std::exit(EXIT_FAILURE);
+		if (ret == 0) {
 			if (options[OptSetVideoOutFormat])
 				ret = doioctl(fd, VIDIOC_S_FMT, &vfmt);
 			else

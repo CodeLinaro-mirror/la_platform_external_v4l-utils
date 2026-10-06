@@ -297,6 +297,26 @@ extern int verbose;
 #define FmtXferFunc		(1L<<13)
 #define FmtSizeImage		(1L<<14)
 
+struct video_format_request {
+	unsigned fields = 0;
+	__u32 width = 0;
+	__u32 height = 0;
+	__u32 pixelformat = 0;
+	__u32 field = V4L2_FIELD_ANY;
+	__u32 colorspace = 0;
+	__u32 xfer_func = 0;
+	__u32 ycbcr = 0;
+	__u32 quantization = 0;
+	__u32 flags = 0;
+	__u32 bytesperline[VIDEO_MAX_PLANES] = {};
+	__u32 sizeimage[VIDEO_MAX_PLANES] = {};
+};
+
+// v4l2-ctl-format.cpp
+__u32 parse_pixelformat(const char *value);
+int video_get_and_update_fmt(cv4l_fd &fd, struct v4l2_format &vfmt,
+			     __u32 type, __u32 magic, video_format_request &request);
+
 // v4l2-ctl.cpp
 int doioctl_name(int fd, unsigned long int request, void *parm, const char *name);
 int test_ioctl(int fd, unsigned long cmd, void *arg);
@@ -307,10 +327,7 @@ __u32 parse_xfer_func(const char *s);
 __u32 parse_ycbcr(const char *s);
 __u32 parse_hsv(const char *s);
 __u32 parse_quantization(const char *s);
-int parse_fmt(char *optarg, __u32 &width, __u32 &height, __u32 &pixelformat,
-	      __u32 &field, __u32 &colorspace, __u32 &xfer, __u32 &ycbcr,
-	      __u32 &quantization, __u32 &flags, __u32 *bytesperline,
-	      __u32 *sizeimage);
+bool parse_fmt(char *optarg, video_format_request &request);
 int parse_selection_target(const char *s, unsigned int &target);
 int parse_selection_flags(const char *s);
 void print_selection(const struct v4l2_selection &sel);

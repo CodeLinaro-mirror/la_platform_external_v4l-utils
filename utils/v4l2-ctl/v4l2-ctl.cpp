@@ -767,19 +767,15 @@ __u32 parse_quantization(const char *s)
 	return V4L2_QUANTIZATION_DEFAULT;
 }
 
-int parse_fmt(char *optarg, __u32 &width, __u32 &height, __u32 &pixelformat,
-	      __u32 &field, __u32 &colorspace, __u32 &xfer_func, __u32 &ycbcr,
-	      __u32 &quantization, __u32 &flags, __u32 *bytesperline,
-	      __u32 *sizeimage)
+bool parse_fmt(char *optarg, video_format_request &request)
 {
 	char *value, *subs;
-	int fmts = 0;
 	unsigned bpl_index = 0;
 	unsigned sizeimage_index = 0;
-	bool be_pixfmt;
 
-	field = V4L2_FIELD_ANY;
-	flags = 0;
+	request.fields = 0;
+	request.field = V4L2_FIELD_ANY;
+	request.flags = 0;
 	subs = optarg;
 	while (*subs != '\0') {
 		static constexpr const char *subopts[] = {
@@ -800,82 +796,80 @@ int parse_fmt(char *optarg, __u32 &width, __u32 &height, __u32 &pixelformat,
 
 		switch (parse_subopt(&subs, subopts, &value)) {
 		case 0:
-			width = strtoul(value, nullptr, 0);
-			fmts |= FmtWidth;
+			request.width = strtoul(value, nullptr, 0);
+			request.fields |= FmtWidth;
 			break;
 		case 1:
-			height = strtoul(value, nullptr, 0);
-			fmts |= FmtHeight;
+			request.height = strtoul(value, nullptr, 0);
+			request.fields |= FmtHeight;
 			break;
 		case 2:
-			be_pixfmt = strlen(value) == 7 && !memcmp(value + 4, "-BE", 3);
-			if (be_pixfmt || strlen(value) == 4) {
-				pixelformat =
-					v4l2_fourcc(value[0], value[1],
-						    value[2], value[3]);
-				if (be_pixfmt)
-					pixelformat |= 1U << 31;
-			} else if (isdigit(value[0])) {
-				pixelformat = strtoul(value, nullptr, 0);
-			} else {
-				fprintf(stderr, "The pixelformat '%s' is invalid\n", value);
-				std::exit(EXIT_FAILURE);
-			}
-			fmts |= FmtPixelFormat;
+			request.pixelformat = parse_pixelformat(value);
+			request.fields |= FmtPixelFormat;
 			break;
 		case 3:
-			field = parse_field(value);
-			fmts |= FmtField;
+			request.field = parse_field(value);
+			request.fields |= FmtField;
 			break;
 		case 4:
-			colorspace = parse_colorspace(value);
-			if (colorspace)
-				fmts |= FmtColorspace;
+			request.colorspace = parse_colorspace(value);
+			if (request.colorspace)
+				request.fields |= FmtColorspace;
 			else
 				fprintf(stderr, "unknown colorspace %s\n", value);
 			break;
 		case 5:
-			ycbcr = parse_ycbcr(value);
-			fmts |= FmtYCbCr;
+			request.ycbcr = parse_ycbcr(value);
+			request.fields |= FmtYCbCr;
 			break;
 		case 6:
-			ycbcr = parse_hsv(value);
-			fmts |= FmtYCbCr;
+			request.ycbcr = parse_hsv(value);
+			request.fields |= FmtYCbCr;
 			break;
 		case 7:
-			bytesperline[bpl_index] = strtoul(value, nullptr, 0);
-			if (bytesperline[bpl_index] > 0xffff) {
+			if (bpl_index == VIDEO_MAX_PLANES) {
+				fprintf(stderr, "Too many bytesperline values (maximum %u)\n",
+					VIDEO_MAX_PLANES);
+				return false;
+			}
+			request.bytesperline[bpl_index] = strtoul(value, nullptr, 0);
+			if (request.bytesperline[bpl_index] > 0xffff) {
 				fprintf(stderr, "bytesperline can't be more than 65535\n");
-				bytesperline[bpl_index] = 0;
+				request.bytesperline[bpl_index] = 0;
 			}
 			bpl_index++;
-			fmts |= FmtBytesPerLine;
+			request.fields |= FmtBytesPerLine;
 			break;
 		case 8:
 			if (strtoul(value, nullptr, 0))
-				flags |= V4L2_PIX_FMT_FLAG_PREMUL_ALPHA;
+				request.flags |= V4L2_PIX_FMT_FLAG_PREMUL_ALPHA;
 			else
-				flags &= ~V4L2_PIX_FMT_FLAG_PREMUL_ALPHA;
-			fmts |= FmtFlags;
+				request.flags &= ~V4L2_PIX_FMT_FLAG_PREMUL_ALPHA;
+			request.fields |= FmtFlags;
 			break;
 		case 9:
-			quantization = parse_quantization(value);
-			fmts |= FmtQuantization;
+			request.quantization = parse_quantization(value);
+			request.fields |= FmtQuantization;
 			break;
 		case 10:
-			xfer_func = parse_xfer_func(value);
-			fmts |= FmtXferFunc;
+			request.xfer_func = parse_xfer_func(value);
+			request.fields |= FmtXferFunc;
 			break;
 		case 11:
-			sizeimage[sizeimage_index] = strtoul(value, nullptr, 0);
+			if (sizeimage_index == VIDEO_MAX_PLANES) {
+				fprintf(stderr, "Too many sizeimage values (maximum %u)\n",
+					VIDEO_MAX_PLANES);
+				return false;
+			}
+			request.sizeimage[sizeimage_index] = strtoul(value, nullptr, 0);
 			sizeimage_index++;
-			fmts |= FmtSizeImage;
+			request.fields |= FmtSizeImage;
 			break;
 		default:
-			return 0;
+			return false;
 		}
 	}
-	return fmts;
+	return request.fields != 0;
 }
 
 int parse_selection_flags(const char *s)

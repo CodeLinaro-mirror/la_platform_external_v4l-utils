@@ -53,8 +53,7 @@ void meta_cmd(int ch, char *optarg)
 			meta_usage();
 			std::exit(EXIT_FAILURE);
 		} else if (strlen(optarg) == 4) {
-			vfmt.fmt.meta.dataformat = v4l2_fourcc(optarg[0],
-					optarg[1], optarg[2], optarg[3]);
+			vfmt.fmt.meta.dataformat = parse_pixelformat(optarg);
 		} else {
 			vfmt.fmt.meta.dataformat = strtoul(optarg, nullptr, 0);
 		}
